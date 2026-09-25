@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,7 +17,8 @@ export function demoIds(): DemoIds {
 
 /** Clone fixtures/demo.bundle (with refs/promptlog/*) into a temp dir, checked out on feature/rates. */
 export function cloneDemo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'pl-demo-'));
+  // realpath: on macOS tmpdir() is under /var, a symlink to /private/var, and git reports real paths.
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'pl-demo-')));
   const run = (args: string[], cwd = dir) => execFileSync('git', args, { cwd, stdio: 'pipe' });
   run(['clone', '-q', join(ROOT, 'fixtures/demo.bundle'), dir], tmpdir());
   run(['fetch', '-q', 'origin', '+refs/promptlog/*:refs/promptlog/*']);
@@ -28,7 +29,7 @@ export function cloneDemo(): string {
 
 /** Empty temp git repo with one commit. */
 export function tempRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'pl-repo-'));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'pl-repo-')));
   const run = (args: string[]) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
   run(['init', '-q', '-b', 'main']);
   run(['config', 'user.name', 'Test']);
