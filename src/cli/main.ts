@@ -19,7 +19,8 @@ Browse
 
 Interrogate
   ask <session> --at <turn> "question"   Ask a question against the conversation + repo state at a turn
-  fork <session> --at <turn>             Continue the conversation from a turn in a new worktree
+  asks <session>                         List past questions asked against a session
+  fork <session> --at <turn> [--exec]    Continue the conversation from a turn in a new worktree
 `;
 
 async function main(argv: string[]): Promise<number> {

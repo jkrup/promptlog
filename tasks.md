@@ -64,7 +64,12 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 - [ ] Code diff as a secondary tab, per turn and cumulative
 - [ ] "Ask at this turn" box on every turn (wires to M3)
 
-### M3: Interrogate + fork (parallel track C) 🔄 subagent running
+### M3: Interrogate + fork ✅ (see docs/ask-fork.md)
+Live demo: the same question at turn 1 vs turn 2 gets different, correct answers (USD hardcoded/unkeyed cache → `?base=`-keyed Map).
+Follow-ups:
+- [ ] Merge diverging `refs/promptlog/asks/*` from multiple reviewers (union of files); a forced fetch currently drops unpushed asks
+- [ ] Haiku sometimes offers to make changes at the end of an answer. Tighten the framing prompt
+- [ ] ~$0.22/ask on haiku (full history re-read, no warm cache). Consider a summary-prefix mode for long sessions
 - [ ] `pl ask <session> --at <turn> "question"`: materialize the `state/` tree into a temp worktree, write the transcript truncated at that turn (rewrite cwd paths), run `claude -p --resume <file> --fork-session`, return the answer
 - [ ] `pl fork <session> --at <turn>`: same, but interactive, leaving you in a live session on a new branch
 - [ ] Save asks as a thread on the session (`asks/` in the ref) so other reviewers see Q&A
@@ -84,7 +89,8 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 - [ ] Getting code off the cloud container: ship `promptlog.bundle` checkpoints to the user (no remote yet)
 - [ ] Fixture with a subagent + `/compact` + a human edit between turns
 - [ ] `pl install` as a proper Claude Code plugin (`plugin/` + marketplace entry) instead of settings.json edits
-- [ ] Linking a fork's captured session to its parent (`SessionMeta.parent`)
+- [ ] Linking a fork's captured session to its parent (`SessionMeta.parent`): marker exists (`readForkMarker`), capture wiring sent to capture agent
+- [ ] Bug: `queue-operation` lines land in the previous turn's chunk and leak the next prompt (ask/fork strips them; the fix is in splitByTurn, sent to capture agent)
 
 ### Later
 - Hosted viewer, profiles, discovery (only for redacted prompt cards; Amp shut down public discovery over secret leakage)
