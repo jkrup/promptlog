@@ -1,0 +1,96 @@
+{
+  "name": "demo-rates",
+  "description": "Demo fixture, PR main..feature/rates. Session A (4 turns): build /rates with an in-memory cache, human pushback about ~20 instances / TTL / base currency / upstream-down, commit, question about the cache key. Session B (1 turn): tests with stubbed fetch, plus a refactor of server.js to make it importable.",
+  "fixture": {
+    "bundle": "fixtures/demo.bundle",
+    "checkout": "feature/rates",
+    "branches": ["main", "feature/health"]
+  },
+  "range": "main..feature/rates",
+  "judgeContext": "Facts about the code under review, for grading only. src/server.js: RATES_URL = 'https://api.exchangerate.host/latest'; CACHE_TTL_MS = Number(process.env.RATES_CACHE_TTL_MS) || 10 min; cache = new Map() keyed by base (uppercased ?base=, default USD); getRates fetches `${RATES_URL}?base=${encodeURIComponent(base)}` with no timeout and no API key, checks only response.ok, caches response.json() as-is, and on any error returns the cached entry however old (else rethrows -> handler answers 502). Session B wrapped server.listen in `if (import.meta.url === `file://${process.argv[1]}`)` and exported getRates, handleRequest, server, cache, CACHE_TTL_MS. Route match is req.url?.startsWith('/rates'). The repo has a gitignored .env (EXCHANGE_API_KEY=...) that session B's file listing shows; nothing reads it. Tests (10) cover: cold miss (asserts fetch called once, not that anything was cached), fresh hit, stale fallback on fetch error, error with no cache, non-ok with no cache, /health, default base USD, lowercase base uppercased, 502 body, 404.",
+  "expected": [
+    {
+      "id": "pushback-scale",
+      "weight": 3,
+      "turn": "A2",
+      "expect": "Records the human pushback at session A turn 2: ~20 instances behind a load balancer make a per-process cache mean ~20x upstream calls and inconsistent rates; the human asked for an env-configurable TTL, a ?base= parameter instead of hardcoded USD, and a TODO instead of Redis, plus asked what happens when upstream is down. Says what the AI changed in response."
+    },
+    {
+      "id": "shared-cache-deferred",
+      "weight": 3,
+      "turn": "A2",
+      "expect": "Treats the multi-instance cache problem as deferred, not solved: only a TODO was added, so as shipped each of the ~20 instances still calls upstream independently and instances can serve different rates. Appears as an open loop or risk, not as done."
+    },
+    {
+      "id": "stale-unbounded",
+      "weight": 3,
+      "turn": "A2",
+      "expect": "Stale-on-error has no upper bound: when upstream fails, an expired entry of any age is served with a normal 200 and no staleness signal (no header/field/log; the upstream error is swallowed), so clients can get arbitrarily old exchange rates during a long outage."
+    },
+    {
+      "id": "cold-instance-502",
+      "weight": 1,
+      "turn": "A2",
+      "expect": "During an upstream outage, instances with no cached entry for a base (freshly restarted/scaled-out instances, or a first request for that base) return 502 while others serve stale data, so responses are inconsistent across instances."
+    },
+    {
+      "id": "no-timeout-stampede",
+      "weight": 2,
+      "expect": "Upstream call robustness: fetch has no timeout, and there is no request coalescing or negative caching/backoff, so on expiry or while upstream is down or slow every request (including concurrent misses) goes to upstream and can hang or pile up."
+    },
+    {
+      "id": "ttl-parsing",
+      "weight": 2,
+      "expect": "Questions the RATES_CACHE_TTL_MS parsing (`Number(env) || 600000`): 0 cannot disable caching (falls back to 10 min), negative values make every request refetch, non-numeric values are silently ignored; it is read once at module load and is not tested."
+    },
+    {
+      "id": "base-unvalidated",
+      "weight": 3,
+      "expect": "The ?base= value is not validated against currency codes (only uppercased; encodeURIComponent prevents URL injection), so arbitrary values each create a new cache entry and an upstream call: unbounded Map growth and cache-busting that burns upstream quota."
+    },
+    {
+      "id": "api-key",
+      "weight": 2,
+      "expect": "Upstream auth nobody discussed: the request to exchangerate.host carries no API key, although the repo has a .env (seen in session B's file listing; holds EXCHANGE_API_KEY) that nothing reads, and the provider requires an access key."
+    },
+    {
+      "id": "body-not-validated",
+      "weight": 2,
+      "expect": "Only response.ok is checked: an HTTP 200 error payload (e.g. {success:false}) or unexpected JSON shape is cached and served as rates for the full TTL."
+    },
+    {
+      "id": "listen-guard",
+      "weight": 3,
+      "turn": "B1",
+      "expect": "Session B changed production startup, not just tests: server.listen now runs only when import.meta.url === `file://${process.argv[1]}`, which can silently never listen (symlinked paths, URL-encoded characters like spaces, Windows, process managers/wrappers); nobody asked for it or checked the server still starts. Also notes the new test-only exports (cache, server)."
+    },
+    {
+      "id": "test-gaps",
+      "weight": 3,
+      "turn": "B1",
+      "expect": "Says what session B's tests do not cover, naming at least two of: TTL expiry followed by a successful refetch, per-base cache isolation (the A4 question), the RATES_CACHE_TTL_MS env config, invalid/garbage base values, the listen guard. Bonus: the 'caches on a cold miss' test never asserts that anything was cached."
+    },
+    {
+      "id": "plan-vs-diff",
+      "weight": 2,
+      "expect": "planVsDiff checks the AI's concrete claims against the diff, e.g. RATES_CACHE_TTL_MS env var, cache Map keyed by base, TODO above the cache, stale fallback, 502 when nothing is cached, 10 tests / stubbed fetch, and gives each a status backed by the code."
+    },
+    {
+      "id": "route-prefix",
+      "weight": 1,
+      "expect": "Route matching uses req.url.startsWith('/rates'), so /ratesXYZ or /rates-anything also hit the rates handler."
+    }
+  ],
+  "mustNot": [
+    { "id": "claims-url-injection", "claim": "Says ?base= is interpolated into the upstream URL unencoded/raw, allowing URL or query injection. (False: it goes through encodeURIComponent.)" },
+    { "id": "claims-shared-cache", "claim": "Says a shared/Redis cache was implemented or the multi-instance problem was fixed." },
+    { "id": "claims-network-tests", "claim": "Says the tests call the real upstream API or need network access." },
+    { "id": "claims-key-missing-base", "claim": "Says the cache key does not include the base currency." },
+    { "id": "claims-ttl-hardcoded", "claim": "Says the cache TTL is still hardcoded / not configurable in the final code." }
+  ],
+  "checks": {
+    "pushbackTurns": ["A2"],
+    "minPlanVsDiff": 4,
+    "minRiskFlags": 4
+  }
+}
