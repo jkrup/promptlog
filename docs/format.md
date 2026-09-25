@@ -13,6 +13,8 @@ git push origin 'refs/promptlog/*:refs/promptlog/*'
 git fetch origin '+refs/promptlog/*:refs/promptlog/*'
 ```
 
+`pl push [remote]` / `pl fetch [remote]` run these. `pl fetch` puts back any local ref the forced fetch would rewind (a session with unpushed turns).
+
 ## Tree of each session commit
 
 ```
@@ -21,19 +23,21 @@ turns/000001/meta.json         TurnMeta
 turns/000001/transcript.jsonl  raw agent transcript lines belonging to this turn (redacted)
 turns/000001/before            tree entry: repo working tree when the prompt was submitted
 turns/000001/after             tree entry: repo working tree when the agent stopped
-turns/000001/subagents/*.jsonl optional subagent transcripts
+turns/000001/subagents/*.jsonl optional subagent transcripts (agent-<id>.jsonl, plus agent-<id>.meta.json when Claude Code wrote one)
 ```
 
 - **Turn** = one human prompt plus everything up to the next human prompt. The turn number is the prompt's position in the transcript (`isHumanPrompt` in `src/core/transcript.ts`), so transcript chunks and snapshots always line up.
 - **Snapshots** (`before`/`after`) come from a per-session temp index (`GIT_INDEX_FILE`) + `git add -A` + `write-tree`. They include tracked files and untracked files that aren't ignored. `.gitignore`d files (e.g. `.env`) are never included. Snapshot trees share objects with normal history, so they cost little.
 - `before(N)` vs `after(N-1)` shows **human edits between turns**. `before(N)` vs `after(N)` shows **what the agent did in turn N**.
-- Captures rewrite only the last two turns, because transcripts flush late. Older turn trees are reused as-is.
-- Transcript text passes through a redactor before it's written. A snapshot excludes `.env`, but the transcript can still contain its contents if the agent read the file.
+- Captures rewrite only the last two turns, because transcripts flush late. Older turn trees are reused as-is. A capture that would change nothing but `updatedAt` writes no commit. Entries other tools add to a turn directory or to the root tree are carried over.
+- Files over 5 MB are left out of snapshots (via a pathspec on the snapshot's `git add`, never the user's ignore files).
+- A subagent transcript is stored under the turn whose prompt has the same `promptId`; without one, under the latest turn.
+- Transcript text passes through a redactor before it's written. A snapshot excludes `.env`, but the transcript can still contain its contents if the agent read the file. Secrets become `[REDACTED:<kind>]`; JSONL stays valid (string values are redacted, ids and signatures are not). Extra patterns: `.promptlog/redact.json` in the repo, e.g. `{"patterns": [{"name": "corp-token", "regex": "corp_[a-z0-9]{32}"}], "disable": ["high-entropy"], "allow": ["..."]}`; a named group `(?<secret>...)` limits redaction to that group.
 
 ## Linking conversations to code (many-to-many)
 
 - `TurnMeta.commits` lists the commits created during that turn (`headBefore..headAfter`).
-- Commits made while a session is active get a trailer `Promptlog: <sessionId>#<turn>` (one line per session). This covers commits the human makes by hand after a turn, and it survives squash merges because git carries trailers into squash messages.
+- Commits made while a session is active get a trailer `Promptlog: <sessionId>#<turn>` (one line per session, the latest turn since the last commit, or the turn in progress). `pl install` adds `prepare-commit-msg`/`commit-msg`/`post-commit` git hooks for this (and `pre-push` with `--auto-push`), chaining to existing hooks kept as `<name>.pre-promptlog`. This covers commits the human makes by hand after a turn, and it survives squash merges because git carries trailers into squash messages.
 - A **review** (the "PR") is a commit range `base..head`. `assembleReview` (`src/core/review.ts`) picks every session with a turn linked to a commit in the range, then slices that session. The slice runs from just after its last turn that committed *outside* the range, through its last in-range committing turn, and on through the trailing discussion. So:
   - several sessions → one review: several slices, ordered by time;
   - one session → several reviews: each review gets its own slice.
@@ -59,7 +63,8 @@ Reviewers' questions put to a session at a turn (`pl ask`), with their answers. 
 ## Local, unpushed state
 
 `<git-dir>/promptlog/`:
-- `sessions/<id>.json`: pending turn (before-snapshot, HEAD at prompt time) and turns since the last commit (feeds the trailer hook)
+- `sessions/<id>.json`: pending turn (before-snapshot, HEAD at prompt time), turns since the last commit (feeds the trailer hook), last captured turn, subagent transcripts not yet stored
+- `sessions/<id>.lock`: held while a hook updates that session
 - `index-<id>`: temp index used for snapshots
 - `errors.log`: hook failures. Hooks never block the agent.
 - `fork.json` + `fork-<sessionId>-t<N>.jsonl`: only in worktrees created by `pl fork`. Parent `{sessionId, turn}` for capture to record as `SessionMeta.parent`, plus the resumable transcript (see `docs/ask-fork.md`).
