@@ -60,7 +60,10 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 - Perf (2,000 files, ~5 MB transcript): warm Stop ≈ 170 ms in-process, ≈ 300 ms via `bin/pl`; `PL_PERF=1 node --test test/capture-perf.test.ts`
 - Open: interrupted turns (no Stop) keep their pending snapshot only until the next prompt; `pl fetch` keeps local on divergence instead of merging `refs/promptlog/asks/*`
 
-### M2: Review viewer (parallel track B) 🔄 subagent running
+### M2: Review viewer ✅ (`pl view`, screenshots in docs/screenshots/)
+Follow-ups:
+- [ ] Per-file "jump to diff" from turn chips
+- [ ] Screenshot/fixture showing the "human edited between turns" marker
 - [ ] `pl view [branch|PR]` serves a local web UI
 - [ ] Conversation-first layout: human turns prominent; AI replies collapsed to one-liners; tool calls collapsed; raw log expandable per turn
 - [ ] Code diff as a secondary tab, per turn and cumulative
