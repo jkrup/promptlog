@@ -38,9 +38,31 @@ turns/000001/subagents/*.jsonl optional subagent transcripts
   - several sessions → one review: several slices, ordered by time;
   - one session → several reviews: each review gets its own slice.
 
+## Asks (`refs/promptlog/asks/<sessionId>`)
+
+Reviewers' questions put to a session at a turn (`pl ask`), with their answers. See `docs/ask-fork.md`.
+
+- There's one ref per session, separate from `refs/promptlog/sessions/*` because capture rebuilds session trees and would drop anything else. The same refspec pushes and fetches it.
+- It's an append-only commit chain. Each commit adds one file and has the message `ask turn <N>: <first line of question>`.
+- The tree is flat: `<id>.json` per ask, where `id` is `<UTC yyyymmddThhmmssZ>-<6 hex>` (sortable, unique across machines). Content is a `StoredAsk` (`src/ask/asks.ts`), a superset of `AskResult` (`src/core/types.ts`):
+
+```json
+{ "schema": 1, "id": "20260925T191200Z-3fa9c1", "sessionId": "…", "turn": 2,
+  "question": "…", "answer": "…", "askedAt": "2026-09-25T19:12:00.123Z", "askedBy": "Rita <rita@example.com>",
+  "model": "haiku", "costUsd": 0.02, "forkSessionId": "<Claude Code session that answered>",
+  "state": { "source": "after", "commit": "<checked-out commit>", "tree": "<snapshot tree>" } }
+```
+
+- `state.source` says which snapshot answered: `after` (turn N's after tree), `next-before` (turn N+1's before tree) or `head-after` (HEAD commit at the end of turn N, when no snapshot exists).
+- Writers compare-and-swap the ref (`update-ref <ref> <new> <old>`) and retry. Since file names are unique, two diverged chains merge as the union of their files.
+
 ## Local, unpushed state
 
 `<git-dir>/promptlog/`:
 - `sessions/<id>.json`: pending turn (before-snapshot, HEAD at prompt time) and turns since the last commit (feeds the trailer hook)
 - `index-<id>`: temp index used for snapshots
 - `errors.log`: hook failures. Hooks never block the agent.
+- `fork.json` + `fork-<sessionId>-t<N>.jsonl`: only in worktrees created by `pl fork`. Parent `{sessionId, turn}` for capture to record as `SessionMeta.parent`, plus the resumable transcript (see `docs/ask-fork.md`).
+- `resume-<sessionId>-t<N>.jsonl`: transcript for an ask's temporary worktree (removed with it).
+
+`<git-common-dir>/promptlog/worktrees/`: temporary worktrees for `pl ask` (removed after answering unless `--keep`).
