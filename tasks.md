@@ -91,8 +91,11 @@ Follow-ups:
 - [ ] Getting code off the cloud container: ship `promptlog.bundle` checkpoints to the user (no remote yet)
 - [ ] Fixture with a subagent + `/compact` + a human edit between turns
 - [ ] `pl install` as a proper Claude Code plugin (`plugin/` + marketplace entry) instead of settings.json edits
-- [ ] Linking a fork's captured session to its parent (`SessionMeta.parent`): marker exists (`readForkMarker`), capture wiring sent to capture agent
-- [ ] Bug: `queue-operation` lines land in the previous turn's chunk and leak the next prompt (ask/fork strips them; the fix is in splitByTurn, sent to capture agent)
+- [x] Linking a fork's captured session to its parent (`SessionMeta.parent`)
+- [x] Bug: `queue-operation` lines leaked the next prompt into turn N (fixed in splitByTurn)
+- [ ] An interrupted turn loses its before-snapshot when the next prompt arrives
+- [ ] `git commit --amend -m` drops the `Promptlog:` trailer
+- [ ] `pl fetch` keeps the local ref on divergence instead of merging `refs/promptlog/asks/*` (same issue as the M3 follow-up)
 
 ### Later
 - Hosted viewer, profiles, discovery (only for redacted prompt cards; Amp shut down public discovery over secret leakage)
