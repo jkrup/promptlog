@@ -3,8 +3,9 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { repoRoot } from '../../core/git.ts';
+import { installGitHooks } from '../../capture/githooks.ts';
 
-export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'Stop', 'SessionEnd'] as const;
+export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'Stop', 'SubagentStop', 'SessionEnd'] as const;
 
 export function hooksConfig(plBin: string) {
   const hooks: Record<string, unknown[]> = {};
@@ -12,13 +13,23 @@ export function hooksConfig(plBin: string) {
   return hooks;
 }
 
+const USAGE = `usage: pl install [--user] [--auto-push] [--no-git-hooks]
+  --user          install Claude Code hooks in ~/.claude/settings.json instead of this repo's .claude/settings.local.json
+  --auto-push     also push refs/promptlog/* whenever you git push (pre-push hook)
+  --no-git-hooks  skip the git hooks (commit trailers)
+`;
+
 export async function run(args: string[]): Promise<number> {
+  if (args.includes('-h') || args.includes('--help')) {
+    process.stdout.write(USAGE);
+    return 0;
+  }
   const plBin = fileURLToPath(new URL('../../../bin/pl', import.meta.url));
   const user = args.includes('--user');
+  const root = repoRoot(process.cwd());
   let target: string;
   if (user) target = join(homedir(), '.claude', 'settings.json');
   else {
-    const root = repoRoot(process.cwd());
     if (!root) {
       process.stderr.write('not inside a git repository (use --user for a global install)\n');
       return 1;
@@ -35,5 +46,11 @@ export async function run(args: string[]): Promise<number> {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, JSON.stringify(settings, null, 2) + '\n');
   process.stdout.write(`installed promptlog hooks into ${target}\n`);
+
+  if (root && !args.includes('--no-git-hooks')) {
+    const res = installGitHooks(root, plBin, { autoPush: args.includes('--auto-push') });
+    process.stdout.write(`installed git hooks (${res.installed.join(', ')}) into ${res.dir}\n`);
+    for (const name of res.chained) process.stdout.write(`  kept your existing ${name} hook: it now runs from ${name}.pre-promptlog\n`);
+  }
   return 0;
 }
