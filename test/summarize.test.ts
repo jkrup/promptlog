@@ -373,6 +373,15 @@ describe('toReviewSummary', () => {
     assert.equal(s.promptVersion, '7');
   });
 
+  test('unwraps a whole answer stuffed into one string field', () => {
+    const stuffed = JSON.stringify({ intent: 'inner intent', approach: 'real approach', assumptions: ['a1'] });
+    const s = toReviewSummary({ intent: 'outer intent', approach: stuffed, assumptions: [] }, meta);
+    assert.equal(s.approach, 'real approach');
+    assert.equal(s.intent, 'outer intent', 'non-empty outer fields win');
+    assert.deepEqual(s.assumptions, ['a1'], 'empty outer fields are filled');
+    assert.equal(toReviewSummary({ approach: '{not json' }, meta).approach, '{not json');
+  });
+
   test('garbage in, empty summary out', () => {
     const s = toReviewSummary(null, meta);
     assert.equal(s.timeline.length, 0);

@@ -54,6 +54,32 @@ export interface ConvertMeta {
   promptVersion: string;
 }
 
+/**
+ * Models occasionally put the whole answer, serialized, into one string field (seen: `approach` holding
+ * '{"intent":…,"approach":…}'). Detect that and lift the inner fields out.
+ */
+function unwrapStuffedJson(o: Json): Json {
+  let out = o;
+  for (const [k, v] of Object.entries(o)) {
+    if (typeof v !== 'string' || !v.trimStart().startsWith('{')) continue;
+    let inner: unknown;
+    try {
+      inner = JSON.parse(v);
+    } catch {
+      continue;
+    }
+    if (!inner || typeof inner !== 'object' || !(k in inner)) continue;
+    const obj = inner as Json;
+    out = { ...out, [k]: obj[k] };
+    // Fill fields the outer object is missing or has empty.
+    for (const [ik, iv] of Object.entries(obj)) {
+      const cur = out[ik];
+      if (ik !== k && (cur == null || cur === '' || (Array.isArray(cur) && cur.length === 0))) out = { ...out, [ik]: iv };
+    }
+  }
+  return out;
+}
+
 const s = (v: unknown): string => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v)).trim();
 const list = (v: unknown): Json[] => (Array.isArray(v) ? v.filter((x): x is Json => !!x && typeof x === 'object') : []);
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
@@ -63,7 +89,7 @@ const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
  * session ids, and snaps turn numbers that fall outside the slice to the nearest turn that exists.
  */
 export function toReviewSummary(raw: unknown, meta: ConvertMeta): ReviewSummary {
-  const o = (raw && typeof raw === 'object' ? raw : {}) as Json;
+  const o = unwrapStuffedJson((raw && typeof raw === 'object' ? raw : {}) as Json);
   const firstSession = [...meta.sessions.values()][0] ?? '';
   const order = [...meta.sessions.values()];
 

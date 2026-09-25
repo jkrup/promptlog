@@ -184,7 +184,8 @@ async function evalOne(spec: EvalSpec, opts: { model: string; judge: string; run
     const quote = last?.quote ? `"${last.quote.replace(/\s+/g, ' ').slice(0, 90)}${last.quote.length > 90 ? '…' : ''}"` : '';
     process.stdout.write(`${pad(e.id, w)}  ${pad(String(e.weight), 2)}  ${itemScore(e.id).toFixed(2)}   ${pad(verdicts, 8)}  ${quote}\n`);
   }
-  process.stdout.write(`\nweighted coverage: ${(score * 100).toFixed(1)}%\n`);
+  const words = runs.map((r) => renderSummaryMarkdown(r.summary).split(/\s+/).filter(Boolean).length);
+  process.stdout.write(`\nweighted coverage: ${(score * 100).toFixed(1)}%   summary length: ${words.join(', ')} words\n`);
   const falses = runs.flatMap((r) => r.falseClaims);
   process.stdout.write(`false claims: ${falses.length ? falses.map((f) => `${f.id} ("${f.quote.slice(0, 80)}")`).join('; ') : 'none'}\n`);
   const checks = runs[runs.length - 1]!.checks;
