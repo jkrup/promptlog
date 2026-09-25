@@ -8,7 +8,7 @@
 //   turns/000001/before                tree: working tree when the prompt was submitted
 //   turns/000001/after                 tree: working tree when the agent stopped
 //   turns/000001/subagents/<id>.jsonl  optional subagent transcripts
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { catFileBatch, currentBranch, git, gitDir, gitMaybe, hashBlob, headSha, lsTree, mktree, type TreeEntry } from './git.ts';
 import { normalize, splitByTurn, transcriptFacts } from './transcript.ts';
@@ -66,18 +66,52 @@ export function writeLocalState(cwd: string, state: LocalSessionState): void {
 // Snapshots
 // ---------------------------------------------------------------------------
 
+/** Files larger than this are left out of snapshots (see snapshotWorktree). */
+export const MAX_SNAPSHOT_FILE_BYTES = 5 * 1024 * 1024;
+
+export interface SnapshotOpts {
+  /** Skip files larger than this many bytes. Default MAX_SNAPSHOT_FILE_BYTES; 0 or Infinity disables the limit. */
+  maxFileBytes?: number;
+  /** Receives the repo-relative paths that were skipped for size. */
+  onSkipped?: (paths: string[]) => void;
+}
+
 /**
  * Snapshot the working tree (tracked + untracked-but-not-ignored files) into a git tree without touching
  * the user's index or worktree. Uses a persistent per-session temp index so re-snapshots only rehash changed files.
+ *
+ * Files over `maxFileBytes` are excluded with a pathspec on the `git add` call, never via the user's ignore files:
+ * an untracked big file is absent from the snapshot, and a tracked one keeps the version already in the temp index
+ * (the HEAD version, or the last snapshot that saw it under the limit).
  */
-export function snapshotWorktree(root: string, sessionId: string): string {
+export function snapshotWorktree(root: string, sessionId: string, opts: SnapshotOpts = {}): string {
   const indexFile = join(localDir(root), `index-${sessionId}`);
   const env = { GIT_INDEX_FILE: indexFile };
   if (!existsSync(indexFile)) {
     const head = headSha(root);
     if (head) git(['read-tree', head], { cwd: root, env });
   }
-  git(['add', '-A', '--', '.'], { cwd: root, env });
+  const limit = opts.maxFileBytes ?? MAX_SNAPSHOT_FILE_BYTES;
+  const skipped: string[] = [];
+  if (limit > 0 && Number.isFinite(limit)) {
+    // Candidates: untracked-not-ignored plus files modified relative to the temp index. Unchanged files are not rehashed.
+    const out = git(['ls-files', '-z', '--others', '--modified', '--exclude-standard'], { cwd: root, env });
+    for (const path of new Set(out.split('\0').filter(Boolean))) {
+      try {
+        const st = statSync(join(root, path));
+        if (st.isFile() && st.size > limit) skipped.push(path);
+      } catch {
+        // deleted or unreadable: let git add handle it
+      }
+    }
+  }
+  if (skipped.length) {
+    const pathspecs = ['.', ...skipped.map((p) => `:(exclude,literal)${p}`)].join('\0') + '\0';
+    git(['add', '-A', '--pathspec-from-file=-', '--pathspec-file-nul'], { cwd: root, env, input: pathspecs });
+    opts.onSkipped?.(skipped);
+  } else {
+    git(['add', '-A', '--', '.'], { cwd: root, env });
+  }
   return git(['write-tree'], { cwd: root, env });
 }
 
@@ -172,9 +206,51 @@ function commitsBetween(root: string, from: string | undefined, to: string | und
   return out ? out.split('\n').filter(Boolean) : [];
 }
 
+/** Names a turn directory always gets from captureSession. Anything else in a turn tree (subagents/, files other tools add) is carried over. */
+const TURN_OWN_ENTRIES = new Set(['meta.json', 'transcript.jsonl', 'before', 'after']);
+
+/**
+ * Write `files` (relative path -> content) into the tree `base` (a list of existing entries), merging directories:
+ * existing entries not named in `files` are kept. Returns the new entry list.
+ */
+function mergeFiles(root: string, base: TreeEntry[], files: [string, string][]): TreeEntry[] {
+  const entries = new Map(base.map((e) => [e.name, e]));
+  const dirs = new Map<string, [string, string][]>();
+  for (const [path, content] of files) {
+    const slash = path.indexOf('/');
+    if (slash < 0) {
+      entries.set(path, blobEntry(root, path, content));
+      continue;
+    }
+    const dir = path.slice(0, slash);
+    const list = dirs.get(dir) ?? [];
+    list.push([path.slice(slash + 1), content]);
+    dirs.set(dir, list);
+  }
+  for (const [dir, list] of dirs) {
+    const prev = entries.get(dir);
+    const sub = mergeFiles(root, prev?.type === 'tree' ? lsTree(root, prev.sha) : [], list);
+    entries.set(dir, { mode: '040000', type: 'tree', sha: mktree(root, sub), name: dir });
+  }
+  return [...entries.values()];
+}
+
+const isSafeExtraPath = (p: string) => {
+  const parts = p.split('/');
+  return parts.every((x) => x && x !== '.' && x !== '..' && !x.includes('\0')) && !TURN_OWN_ENTRIES.has(parts[0]!);
+};
+
+/** JSON with sorted keys, for comparing metadata regardless of key order. */
+function stableJson(v: unknown): string {
+  return JSON.stringify(v, (_k, x: unknown) =>
+    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x,
+  );
+}
+
 /**
  * Write the session's current transcript into its ref. Idempotent: re-running rewrites the latest turns
- * (transcripts can flush late) and reuses everything older.
+ * (transcripts can flush late) and reuses everything older. When nothing but `updatedAt` would change, no commit is
+ * written and the existing head is returned.
  */
 export function captureSession(input: CaptureInput): CaptureResult | null {
   const { root, sessionId } = input;
@@ -196,15 +272,15 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
   for (let i = 1; i <= N; i++) {
     const name = turnDirName(i);
     const prevEntry = prevTurns.get(name);
-    const rewrite = i >= N - 1 || !prevEntry;
+    const extra = Object.entries(input.extraFiles?.get(i) ?? {}).filter(([p]) => isSafeExtraPath(p));
+    const rewrite = i >= N - 1 || !prevEntry || extra.length > 0;
     if (!rewrite && prevEntry) {
       turnEntries.push(prevEntry);
       continue;
     }
     const chunk = chunks[i - 1]!;
     const prevItems = prevEntry ? lsTree(root, prevEntry.sha) : [];
-    const keep = new Map(prevItems.map((e) => [e.name, e]));
-    let meta: TurnMeta = (prevEntry && readJsonAt<TurnMeta>(root, `${prevEntry.sha}:meta.json`)) || { schema: SCHEMA_VERSION, index: i, commits: [] };
+    const meta: TurnMeta = (prevEntry && readJsonAt<TurnMeta>(root, `${prevEntry.sha}:meta.json`)) || { schema: SCHEMA_VERSION, index: i, commits: [] };
     meta.index = i;
     meta.promptUuid = chunk.promptUuid ?? meta.promptUuid;
     meta.model = normalized[i - 1]?.model ?? meta.model;
@@ -222,29 +298,28 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
       if (c.stateAfter) meta.stateAfter = c.stateAfter;
       if (c.headAfter) meta.headAfter = c.headAfter;
       meta.endedAt = c.endedAt ?? new Date().toISOString();
-      meta.commits = commitsBetween(root, meta.headBefore, meta.headAfter);
+      // Without a known starting point (no UserPromptSubmit seen for this turn) `rev-list headAfter` would claim the
+      // whole history, so only compute commits when the turn's start was recorded. A pending turn with no headBefore
+      // means HEAD was unborn, and then every commit is new.
+      if (p || meta.headBefore) meta.commits = commitsBetween(root, meta.headBefore, meta.headAfter);
       if (meta.stateBefore && meta.stateAfter) meta.filesChanged = diffTrees(root, meta.stateBefore, meta.stateAfter);
     }
+    meta.commits ??= [];
 
-    const items: TreeEntry[] = [];
-    items.push(blobEntry(root, 'meta.json', JSON.stringify(meta, null, 2) + '\n'));
-    items.push(blobEntry(root, 'transcript.jsonl', chunk.lines.map(redact).join('\n') + '\n'));
-    if (meta.stateBefore) items.push({ mode: '040000', type: 'tree', sha: meta.stateBefore, name: 'before' });
-    if (meta.stateAfter) items.push({ mode: '040000', type: 'tree', sha: meta.stateAfter, name: 'after' });
-
-    const extra = input.extraFiles?.get(i);
-    const subEntries: TreeEntry[] = [];
-    if (extra) {
-      for (const [path, content] of Object.entries(extra)) {
-        const [dir, file] = path.split('/') as [string, string | undefined];
-        if (dir === 'subagents' && file) subEntries.push(blobEntry(root, file, redact(content)));
-      }
-    } else if (keep.get('subagents')) {
-      items.push(keep.get('subagents')!);
-    }
-    if (subEntries.length) items.push({ mode: '040000', type: 'tree', sha: mktree(root, subEntries), name: 'subagents' });
+    const own: TreeEntry[] = [
+      blobEntry(root, 'meta.json', JSON.stringify(meta, null, 2) + '\n'),
+      blobEntry(root, 'transcript.jsonl', chunk.lines.map(redact).join('\n') + '\n'),
+    ];
+    if (meta.stateBefore) own.push({ mode: '040000', type: 'tree', sha: meta.stateBefore, name: 'before' });
+    if (meta.stateAfter) own.push({ mode: '040000', type: 'tree', sha: meta.stateAfter, name: 'after' });
+    // Carry over everything else from the previous version of this turn (subagents/, entries other tools add), then
+    // merge in new extra files: a later capture adds subagent transcripts without dropping earlier ones.
+    const carried = prevItems.filter((e) => !TURN_OWN_ENTRIES.has(e.name));
+    const items = [...own, ...mergeFiles(root, carried, extra.map(([p, content]) => [p, redact(content)]))];
     turnEntries.push({ mode: '040000', type: 'tree', sha: mktree(root, items), name });
   }
+  // Never drop stored turns: if the transcript now has fewer prompts than the ref (file replaced or truncated), keep them.
+  for (const [name, e] of prevTurns) if (Number(name) > N) turnEntries.push(e);
 
   // session.json
   const facts = transcriptFacts(lines);
@@ -252,6 +327,7 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
   const now = new Date().toISOString();
   const nameEmail = gitMaybe(['var', 'GIT_AUTHOR_IDENT'], { cwd: root });
   const author = nameEmail ? /^(.*) <(.*)> \d+ [+-]\d+$/.exec(nameEmail) : null;
+  const firstLine = (t: string | undefined, n: number) => (t === undefined ? undefined : redact(t.split('\n')[0] ?? '').slice(0, n));
   const meta: SessionMeta = {
     schema: SCHEMA_VERSION,
     sessionId,
@@ -260,22 +336,29 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
     startedAt: prevMeta?.startedAt ?? facts.startedAt ?? now,
     ...prevMeta,
     ...(facts.version ? { agentVersion: facts.version } : {}),
-    ...(facts.title ? { title: facts.title } : prevMeta?.title ? {} : { title: normalized[0]?.prompt.split('\n')[0]?.slice(0, 80) }),
+    ...(facts.title ? { title: redact(facts.title) } : prevMeta?.title ? {} : { title: firstLine(normalized[0]?.prompt, 80) }),
     ...(author ? { author: { name: author[1]!, email: author[2]! } } : {}),
     branch: currentBranch(root) ?? prevMeta?.branch ?? facts.branch,
     ...input.sessionPatch,
     updatedAt: now,
   };
 
+  const turnsTree = mktree(root, turnEntries);
+  const prevRoot = prev ? lsTree(root, prev) : [];
+  const unchanged =
+    prevMeta && prevRoot.find((e) => e.name === 'turns')?.sha === turnsTree && stableJson({ ...prevMeta, updatedAt: '' }) === stableJson({ ...meta, updatedAt: '' });
+  if (prev && unchanged) return { commit: prev, turnCount: N, currentTurn: N };
   const rootTree = mktree(root, [
+    // Keep root entries other tools may add next to session.json and turns/.
+    ...prevRoot.filter((e) => e.name !== 'session.json' && e.name !== 'turns'),
     blobEntry(root, 'session.json', JSON.stringify(meta, null, 2) + '\n'),
-    { mode: '040000', type: 'tree', sha: mktree(root, turnEntries), name: 'turns' },
+    { mode: '040000', type: 'tree', sha: turnsTree, name: 'turns' },
   ]);
-  const prompt = normalized[N - 1]?.prompt.split('\n')[0]?.slice(0, 72) ?? '';
+  const prompt = firstLine(normalized[N - 1]?.prompt, 72) ?? '';
   const args = ['commit-tree', rootTree, '-m', `turn ${N}: ${prompt}`];
   if (prev) args.push('-p', prev);
   const commit = git(args, { cwd: root });
-  git(['update-ref', ref, commit, ...(prev ? [prev] : [])], { cwd: root });
+  git(['update-ref', ref, commit, prev ?? ''], { cwd: root });
   return { commit, turnCount: N, currentTurn: N };
 }
 

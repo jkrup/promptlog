@@ -20,6 +20,8 @@ export interface RawEntry {
   gitBranch?: string;
   content?: unknown;
   aiTitle?: string;
+  /** queue-operation entries: enqueue | dequeue | remove. */
+  operation?: string;
   message?: {
     id?: string;
     role?: string;
@@ -49,6 +51,9 @@ function blocksOf(content: unknown): Block[] {
   return Array.isArray(content) ? (content as Block[]) : [];
 }
 
+/** Written by Claude Code as a user entry when the human presses Esc; an event, not a prompt. */
+const INTERRUPT_MARKER = /^\s*\[Request interrupted by user[^\]]*\]\s*$/;
+
 const INJECTED_PREFIX = /^\s*<(local-command-stdout|local-command-stderr|local-command-caveat|system-reminder|task-notification|teammate-message|user-prompt-submit-hook|bash-stdout|bash-stderr)\b/;
 
 /**
@@ -63,6 +68,7 @@ export function isHumanPrompt(e: RawEntry): boolean {
   if (e.origin?.kind) return e.origin.kind === 'human';
   const text = blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n');
   if (!text.trim()) return blocks.some((b) => b.type === 'image');
+  if (INTERRUPT_MARKER.test(text)) return false;
   return !INJECTED_PREFIX.test(text);
 }
 
@@ -89,23 +95,36 @@ function toolResultText(content: unknown): string {
     .join('\n');
 }
 
+/** `queue-operation` enqueue/dequeue entries: Claude Code writes these just before the prompt they queue. */
+function isPromptQueueOp(e: RawEntry | null): boolean {
+  return e?.type === 'queue-operation' && (e.operation === 'enqueue' || e.operation === 'dequeue');
+}
+
 /**
  * Split raw transcript lines into per-turn chunks, keyed by the ordinal of the human prompt.
  * Lines before the first prompt (preamble metadata) are attached to turn 1.
+ * Queue operations written after a turn's last user/assistant entry belong to the next prompt (they carry its text),
+ * so they move to the next chunk together with whatever follows them; concatenating the chunks still gives `lines`.
  * Returns chunks[0] = turn 1. Used by the store so every turn's raw log lives in its own blob.
  */
 export function splitByTurn(lines: string[]): { promptUuid?: string; lines: string[] }[] {
   const chunks: { promptUuid?: string; lines: string[] }[] = [];
   let preamble: string[] = [];
+  let carryFrom = -1; // index in the current chunk of the first queue op after its last user/assistant entry
   for (const line of lines) {
     const e = parseEntry(line);
     if (e && isHumanPrompt(e)) {
-      chunks.push({ promptUuid: e.uuid, lines: chunks.length === 0 ? [...preamble, line] : [line] });
+      const carry = chunks.length > 0 && carryFrom >= 0 ? chunks[chunks.length - 1]!.lines.splice(carryFrom) : [];
+      chunks.push({ promptUuid: e.uuid, lines: chunks.length === 0 ? [...preamble, line] : [...carry, line] });
       preamble = [];
+      carryFrom = -1;
     } else if (chunks.length === 0) {
       preamble.push(line);
     } else {
-      chunks[chunks.length - 1]!.lines.push(line);
+      const cur = chunks[chunks.length - 1]!.lines;
+      cur.push(line);
+      if (e?.type === 'user' || e?.type === 'assistant') carryFrom = -1;
+      else if (carryFrom < 0 && isPromptQueueOp(e)) carryFrom = cur.length - 1;
     }
   }
   return chunks;

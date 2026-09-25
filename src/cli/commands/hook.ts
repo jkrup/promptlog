@@ -1,3 +1,4 @@
+import { loadForkMarkerReader } from '../../capture/fork.ts';
 import { handleHook, logHookError, type HookPayload } from '../../capture/hook.ts';
 
 async function readStdin(): Promise<string> {
@@ -11,7 +12,10 @@ export async function run(args: string[]): Promise<number> {
   let payload: HookPayload = {};
   try {
     payload = JSON.parse((await readStdin()) || '{}') as HookPayload;
-    handleHook(event || payload.hook_event_name || '', payload);
+    const ev = event || payload.hook_event_name || '';
+    // Only capturing events can record a fork parent; don't pay for loading src/ask on every prompt.
+    const readForkMarker = ev === 'Stop' || ev === 'SessionEnd' ? await loadForkMarkerReader() : undefined;
+    handleHook(ev, payload, { readForkMarker });
   } catch (err) {
     logHookError(payload.cwd, event, err);
   }
