@@ -47,7 +47,7 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 - [x] Hook handler + `pl install|hook|import|ls|show|review`
 - [x] Review assembly: commit range → session slices, many-to-many (`src/core/review.ts`)
 - [x] `childClaudeEnv()`: strip parent-session env vars when spawning `claude` from inside Claude Code (found the hard way: nested runs reused the parent's session id)
-- [ ] Demo fixture `fixtures/demo.bundle`: 3 real captured sessions (pushback turn, 2 sessions → 1 PR, 1 session on another branch). Generating now
+- [x] Demo fixture `fixtures/demo.bundle`: 3 real captured sessions (pushback turn, 2 sessions → 1 PR, 1 session on another branch). Verified: `pl review main..feature/rates` pulls session A turns 1–4 + session B and excludes session C
 - [ ] Still needed: a fixture with a subagent and a `/compact`
 
 ### M1: Capture (parallel track A) 🔄 subagent running
@@ -58,18 +58,18 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 - [ ] Commit trailer hook (`prepare-commit-msg`)
 - [ ] `pl ls` / `pl show <session>`
 
-### M2: Review viewer (parallel track B, builds against fixtures from M0)
+### M2: Review viewer (parallel track B) 🔄 subagent running
 - [ ] `pl view [branch|PR]` serves a local web UI
 - [ ] Conversation-first layout: human turns prominent; AI replies collapsed to one-liners; tool calls collapsed; raw log expandable per turn
 - [ ] Code diff as a secondary tab, per turn and cumulative
 - [ ] "Ask at this turn" box on every turn (wires to M3)
 
-### M3: Interrogate + fork (parallel track C)
+### M3: Interrogate + fork (parallel track C) 🔄 subagent running
 - [ ] `pl ask <session> --at <turn> "question"`: materialize the `state/` tree into a temp worktree, write the transcript truncated at that turn (rewrite cwd paths), run `claude -p --resume <file> --fork-session`, return the answer
 - [ ] `pl fork <session> --at <turn>`: same, but interactive, leaving you in a live session on a new branch
 - [ ] Save asks as a thread on the session (`asks/` in the ref) so other reviewers see Q&A
 
-### M4: The taste layer: summaries and diffs (parallel track D; prompt work first, UI after)
+### M4: The taste layer: summaries and diffs (parallel track D) 🔄 subagent running
 - [ ] Review summary: intent, plan, alternatives considered and rejected, human pushbacks/corrections, open loops (raised and never resolved), assumptions
 - [ ] Plan-vs-diff check: what the AI said it would do vs what the code diff actually contains
 - [ ] Eval set: 5–10 fixture sessions with hand-written "what a reviewer should notice"
@@ -78,6 +78,13 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 ### M5: Meet reviewers where they are
 - [ ] GitHub Action: on PR, fetch `refs/promptlog/*`, post/update a summary comment with a link to the viewer
 - [ ] `/ask @turn14 …` PR comment trigger runs M3 in CI (needs a Claude token secret)
+
+### Backlog (noticed along the way)
+- [ ] `git log --all` shows promptlog capture commits. Document `git log --all --exclude='refs/promptlog/*'` or set `log.excludeDecoration`; consider fewer commits (the Stop and SessionEnd of the same turn both commit today)
+- [ ] Getting code off the cloud container: ship `promptlog.bundle` checkpoints to the user (no remote yet)
+- [ ] Fixture with a subagent + `/compact` + a human edit between turns
+- [ ] `pl install` as a proper Claude Code plugin (`plugin/` + marketplace entry) instead of settings.json edits
+- [ ] Linking a fork's captured session to its parent (`SessionMeta.parent`)
 
 ### Later
 - Hosted viewer, profiles, discovery (only for redacted prompt cards; Amp shut down public discovery over secret leakage)
