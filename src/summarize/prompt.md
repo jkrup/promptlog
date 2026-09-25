@@ -1,4 +1,4 @@
-<!-- promptVersion: 3 -->
+<!-- promptVersion: 4 -->
 <review_material>
 {{MATERIAL}}
 </review_material>
@@ -27,7 +27,7 @@ Write a review brief for the engineer who has to approve this PR. They read your
 ## Rules
 
 - Cite turns by session label and turn number (session "A", turn 2 is A2). Every item points to the turn where it was said or done. For behaviour nobody discussed, cite the turn that wrote the code.
-- Be concrete and short: name the file, function, env var or value, and the failure scenario ("if upstream is down for an hour, clients get hour-old rates with a 200"). One or two sentences per item.
+- Be concrete and brief. The reviewer should get each point at a glance: lead with the consequence, then the cause ("During a long upstream outage clients get hour-old rates with a 200: the stale fallback in getRates has no max age"). Name the file, function, env var or value. At most ~40 words per item.
 - The diff is the ground truth. If the conversation and the diff disagree, say so.
 - Say whether a risk was discussed ("acknowledged in A2 with a TODO") or not ("not discussed").
 - Don't invent facts about the code. If the material doesn't show it, say it's unclear. No generic advice.
@@ -36,11 +36,11 @@ Write a review brief for the engineer who has to approve this PR. They read your
 ## Fields
 
 - intent: 1-2 sentences, what the human was trying to get done.
-- approach: how it was done, in reviewer terms (2-4 sentences).
-- timeline: one entry per turn, a gist of at most ~15 words.
-- decisions: design decisions (by the human or the AI), with rationale and any alternatives mentioned.
+- approach: how it was done, in reviewer terms (2-3 sentences).
+- timeline: one entry per turn, a gist of at most ~12 words.
+- decisions: design decisions a reviewer might question (by the human or the AI), with rationale and any alternatives mentioned. Skip the obvious.
 - pushbacks: every place the human corrected, redirected, constrained or questioned the approach (not plain approvals like "looks good, commit"). humanSaid: short quote or paraphrase. aiChanged: what changed in response according to the diff, including what did not change.
 - openLoops: raised and never resolved: deferred work and TODOs, unanswered or partly answered questions, caveats the AI raised that nobody acted on, requirements that were dropped.
-- assumptions: assumptions the code or the conversation makes that a reviewer should confirm.
-- planVsDiff: one entry per concrete claim the AI made about what it did or would do. status: done | partial | missing | unclear. evidence: the code that confirms or contradicts it.
+- assumptions: facts about the environment the change relies on that a reviewer should confirm (0-4 items; not risks restated).
+- planVsDiff: one entry per concrete claim the AI made about what it did or would do. status: done | partial | missing | unclear. evidence: the code that confirms or contradicts it, in a few words.
 - riskFlags: findings from steps 2-7, most important first. Include risks that were discussed but remain in the shipped code, and behaviour nobody discussed. Merge duplicates; aim for the 6-12 that matter most. If tests were added or changed, one flag must start with "Test gaps:" and list the specific untested behaviours from step 5. severity: high = users can get wrong or stale results, an outage, data loss or a security hole under realistic conditions; medium = likely operational pain or a footgun; low = minor or cosmetic.
