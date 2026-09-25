@@ -443,6 +443,8 @@ describe('renderSummaryMarkdown', () => {
     assert.ok(md.indexOf('`missing`') < md.indexOf('`done`'), 'misses before confirmations');
     assert.match(md, /A = session sess-aaa "Rates" · B = session sess-bbb/);
     assert.doesNotMatch(md, /### Decisions/, 'empty sections are omitted');
+    const withDecision = renderSummaryMarkdown({ ...s, decisions: [{ sessionId: 'sess-aaaaaaaa', turn: 1, decision: 'Use a Map.', rationale: 'Simple.', alternatives: ['Redis.'] }] });
+    assert.match(withDecision, /- \*\*A1\*\* Use a Map\. Why: Simple\. Alternatives: Redis\n/);
   });
 });
 

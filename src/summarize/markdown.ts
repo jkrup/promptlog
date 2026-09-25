@@ -27,6 +27,9 @@ export function summaryLabels(s: ReviewSummary): Map<string, string> {
 
 const STATUS_ORDER = { missing: 0, partial: 1, unclear: 2, done: 3 } as const;
 
+/** Drop trailing punctuation so joined fragments don't read "added.. Why:". */
+const bare = (x: string) => x.replace(/[\s.;:,]+$/, '');
+
 export function renderSummaryMarkdown(s: ReviewSummary, opts: MarkdownOptions = {}): string {
   const labels = summaryLabels(s);
   const ref = (sessionId?: string, turn?: number) => (sessionId && turn ? `**${labels.get(sessionId) ?? sessionId.slice(0, 8)}${turn}**` : '');
@@ -54,13 +57,13 @@ export function renderSummaryMarkdown(s: ReviewSummary, opts: MarkdownOptions = 
   const plan = [...s.planVsDiff].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
   section(
     'Plan vs diff',
-    plan.map((p) => `- ${ref(p.sessionId, p.turn)} \`${p.status}\` ${p.claim}${p.evidence ? ` (${p.evidence})` : ''}`),
+    plan.map((p) => `- ${ref(p.sessionId, p.turn)} \`${p.status}\` ${bare(p.claim)}${p.evidence ? ` (${bare(p.evidence)})` : ''}`),
   );
   section(
     'Decisions',
     s.decisions.map(
       (d) =>
-        `- ${ref(d.sessionId, d.turn)} ${d.decision}${d.rationale ? `. Why: ${d.rationale}` : ''}${d.alternatives?.length ? `. Alternatives: ${d.alternatives.join('; ')}` : ''}`,
+        `- ${ref(d.sessionId, d.turn)} ${bare(d.decision)}${d.rationale ? `. Why: ${bare(d.rationale)}` : ''}${d.alternatives?.length ? `. Alternatives: ${d.alternatives.map(bare).join('; ')}` : ''}`,
     ),
   );
   section('Assumptions', s.assumptions.map((a) => `- ${a}`));
