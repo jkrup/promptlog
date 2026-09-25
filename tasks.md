@@ -50,13 +50,15 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 - [x] Demo fixture `fixtures/demo.bundle`: 3 real captured sessions (pushback turn, 2 sessions → 1 PR, 1 session on another branch). Verified: `pl review main..feature/rates` pulls session A turns 1–4 + session B and excludes session C
 - [ ] Still needed: a fixture with a subagent and a `/compact`
 
-### M1: Capture (parallel track A) 🔄 subagent running
-- [ ] Claude Code plugin with hooks: `SessionStart`, `UserPromptSubmit`, `Stop` (turn boundary → write turn commit + state snapshot), `SubagentStop`, `SessionEnd`
-- [ ] Git plumbing writer: temp-index snapshot, tree building, append commit, update-ref (never touches the user's index/worktree)
-- [ ] Redaction pass before anything is written (regex + entropy; study Entire `redact/` and AgentNote's sanitizer). Needed because the transcript can contain `.env` contents even though snapshots exclude the file
-- [ ] `pl push` / `pl fetch` (refspec config), optional pre-push hook
-- [ ] Commit trailer hook (`prepare-commit-msg`)
-- [ ] `pl ls` / `pl show <session>`
+### M1: Capture (parallel track A) ✅ done
+- [x] Claude Code plugin with hooks: `SessionStart`, `UserPromptSubmit`, `Stop` (turn boundary → write turn commit + state snapshot), `SubagentStop`, `SessionEnd`
+- [x] Git plumbing writer: temp-index snapshot, tree building, append commit, update-ref (never touches the user's index/worktree). Files > 5 MB skipped; captures are idempotent
+- [x] Redaction pass before anything is written (`src/capture/redact.ts`: provider formats, assignments, dotenv entropy; `.promptlog/redact.json` for extra patterns)
+- [x] `pl push` / `pl fetch` (refspec config), optional pre-push hook (`pl install --auto-push`)
+- [x] Commit trailer hook (`prepare-commit-msg` + `commit-msg` + `post-commit`, chained with existing hooks)
+- [x] `pl ls` / `pl show <session>`
+- Perf (2,000 files, ~5 MB transcript): warm Stop ≈ 170 ms in-process, ≈ 300 ms via `bin/pl`; `PL_PERF=1 node --test test/capture-perf.test.ts`
+- Open: interrupted turns (no Stop) keep their pending snapshot only until the next prompt; `pl fetch` keeps local on divergence instead of merging `refs/promptlog/asks/*`
 
 ### M2: Review viewer (parallel track B) 🔄 subagent running
 - [ ] `pl view [branch|PR]` serves a local web UI

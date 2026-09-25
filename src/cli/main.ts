@@ -7,9 +7,13 @@ const HELP = `pl: prompt-native code review
 Usage: pl <command> [args]
 
 Capture
-  install [--user]           Install Claude Code hooks (repo-local .claude/settings.local.json by default)
+  install [--user] [--auto-push]  Install Claude Code hooks (repo-local .claude/settings.local.json by default)
+                             and git hooks for commit trailers (--auto-push: also push sessions on git push)
   hook <Event>               (internal) handle a Claude Code hook event; reads JSON on stdin
+  trailer <msg-file>         (internal) git hook helper for Promptlog commit trailers
   import <transcript.jsonl>  Import an existing Claude Code transcript (no per-turn snapshots)
+  push [remote]              Push captured sessions (refs/promptlog/*)
+  fetch [remote]             Fetch teammates' sessions (keeps local unpushed turns)
 
 Browse
   ls                         List captured sessions
