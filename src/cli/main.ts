@@ -20,6 +20,7 @@ Browse
   show <session> [--raw]     Print a session's turns
   review <base>..<head>      Conversations behind a commit range (a "PR")
   view [<base>..<head>]      Open the review viewer in a browser
+  summarize [<base>..<head>] Reviewer summary: pushbacks, open loops, plan vs diff, risks
 
 Interrogate
   ask <session> --at <turn> "question"   Ask a question against the conversation + repo state at a turn

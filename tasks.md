@@ -79,7 +79,13 @@ Follow-ups:
 - [ ] `pl fork <session> --at <turn>`: same, but interactive, leaving you in a live session on a new branch
 - [ ] Save asks as a thread on the session (`asks/` in the ref) so other reviewers see Q&A
 
-### M4: The taste layer: summaries and diffs (parallel track D) 🔄 subagent running
+### M4: The taste layer ✅ (`pl summarize`, prompt v4 in src/summarize/prompt.md)
+Eval (`npm run eval`, 13 weighted items on the demo PR): v1 58% → v4 ~91% coverage, no false claims. About $0.15 and 90s per summary on sonnet; cached afterwards.
+Follow-ups:
+- [ ] Eval judge (haiku) is noisy; use a stronger judge or multiple runs
+- [ ] Optional `riskFlags[].category`
+- [ ] Session-to-session diff (two attempts at the same task; fork vs parent)
+- [ ] More eval fixtures beyond the one demo PR
 - [ ] Review summary: intent, plan, alternatives considered and rejected, human pushbacks/corrections, open loops (raised and never resolved), assumptions
 - [ ] Plan-vs-diff check: what the AI said it would do vs what the code diff actually contains
 - [ ] Eval set: 5–10 fixture sessions with hand-written "what a reviewer should notice"
