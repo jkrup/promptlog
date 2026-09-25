@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Runs the TypeScript CLI directly via Node's built-in type stripping (Node >= 22.18).
+DIR="$(dirname "$(readlink -f "$0")")"
+exec node --no-warnings "$DIR/../src/cli/main.ts" "$@"

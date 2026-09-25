@@ -1,0 +1,22 @@
+{
+  "name": "promptlog",
+  "version": "0.0.1",
+  "description": "Prompt-native code review: capture AI coding conversations into git, review them, interrogate any turn.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "pl": "bin/pl"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "node --no-warnings --test 'test/**/*.test.ts' 'src/**/*.test.ts'",
+    "pl": "node --no-warnings src/cli/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^7.0.2"
+  }
+}
