@@ -12,13 +12,15 @@ Assumptions: reviewers have access to the same git repo. "State" means git-visib
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | Build our own capture layer, borrowing ideas and code from AgentNote (MIT, TypeScript) and Entire (MIT, Go). Neither ships full transcripts plus per-turn repo state to teammates, and interrogate/fork needs both. | Proposed, needs a thumbs-up |
-| D2 | TypeScript on Node 22, published to npm. Matches AgentNote, so we can lift its prompt sanitizer and PR-report ideas. | Proposed, needs a thumbs-up |
-| D3 | Storage lives in the same repo under custom refs (`refs/promptlog/sessions/<id>`), pushed and fetched alongside branches. Repo access = conversation access. | Proposed |
-| D4 | Summaries and interrogation run on headless `claude -p` (the user's Claude plan). No API key needed until CI. | Proposed |
-| D5 | v0 is local-first: CLI plus a local web viewer. PR comment/Action comes next. Hosted/social comes later. | Proposed |
+| D1 | Build our own capture layer, borrowing ideas and code from AgentNote (MIT, TypeScript) and Entire (MIT, Go). Neither ships full transcripts plus per-turn repo state to teammates, and interrogate/fork needs both. | ✅ agreed |
+| D2 | TypeScript run directly by Node's type stripping (Node ≥22.18; user runs 24). No build step, zero runtime deps. Infra later: Cloudflare first, GCP (Cloud Run) for long-running work. | ✅ agreed |
+| D3 | Storage lives in the same repo under custom refs (`refs/promptlog/sessions/<id>`), pushed and fetched alongside branches. Repo access = conversation access. | ✅ agreed |
+| D4 | Summaries and interrogation run on headless `claude -p` (the user's Claude plan). No API key needed until CI. | ✅ agreed |
+| D5 | v0 is **local git only**: no GitHub. A "PR" = a commit range `base..head` on local branches; raw git diffs. | ✅ agreed |
+| D6 | Snapshots include untracked-but-not-ignored files. | ✅ agreed |
+| D7 | Sessions ↔ PRs are many-to-many: linking goes through commits (`TurnMeta.commits` + `Promptlog:` trailers), and reviews slice sessions by commit range. | ✅ built into the core |
 
-## Data model (draft, to lock in M0)
+## Data model (locked for schema 1; see docs/format.md, which is authoritative)
 
 One append-only commit chain per session, one commit per turn, at `refs/promptlog/sessions/<session-id>`. Each commit's tree:
 
@@ -37,13 +39,18 @@ Linking: record the HEAD and commits per turn. Add a `Promptlog-Session: <id>` t
 
 ## Milestones
 
-### M0: Foundations (blocks everything; do first, mostly me)
-- [ ] Create repo, attach to session, scaffold TS monorepo (`packages/core`, `packages/cli`, `packages/viewer`, `packages/plugin`)
-- [ ] Lock the data model above in `docs/format.md` plus TypeScript types in `core`
-- [ ] Collect fixtures: real Claude Code transcripts (dogfood this repo's own sessions), including a subagent, a `/compact` and a multi-session PR
-- [ ] Transcript normalizer: Claude Code JSONL → `Turn[]` (human prompt, assistant text, tool calls/results, subagent refs). Defensive, because the format is internal and changes between versions
+### M0: Foundations ✅ (orchestrator)
+- [x] Scaffold single-package TS repo (`src/core`, `src/capture`, `src/viewer`, `src/ask`, `src/summarize`, `src/cli/commands/*`)
+- [x] Data model: `docs/format.md` + `src/core/types.ts`
+- [x] Git store: per-turn commits, before/after worktree snapshots, idempotent re-capture (`src/core/store.ts`)
+- [x] Transcript normalizer + turn splitter (`src/core/transcript.ts`)
+- [x] Hook handler + `pl install|hook|import|ls|show|review`
+- [x] Review assembly: commit range → session slices, many-to-many (`src/core/review.ts`)
+- [x] `childClaudeEnv()`: strip parent-session env vars when spawning `claude` from inside Claude Code (found the hard way: nested runs reused the parent's session id)
+- [ ] Demo fixture `fixtures/demo.bundle`: 3 real captured sessions (pushback turn, 2 sessions → 1 PR, 1 session on another branch). Generating now
+- [ ] Still needed: a fixture with a subagent and a `/compact`
 
-### M1: Capture (parallel track A)
+### M1: Capture (parallel track A) 🔄 subagent running
 - [ ] Claude Code plugin with hooks: `SessionStart`, `UserPromptSubmit`, `Stop` (turn boundary → write turn commit + state snapshot), `SubagentStop`, `SessionEnd`
 - [ ] Git plumbing writer: temp-index snapshot, tree building, append commit, update-ref (never touches the user's index/worktree)
 - [ ] Redaction pass before anything is written (regex + entropy; study Entire `redact/` and AgentNote's sanitizer). Needed because the transcript can contain `.env` contents even though snapshots exclude the file

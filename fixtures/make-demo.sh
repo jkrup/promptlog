@@ -35,7 +35,13 @@ cat > "$WORK/settings.json" <<J
   "SessionEnd": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/pl hook SessionEnd"}]}]
 } }
 J
-CL=(claude -p --model "$MODEL" --settings "$WORK/settings.json" --output-format json
+# When generated from inside another Claude Code session, drop the parent's session identity so nested runs
+# get their own session ids and don't stream into the parent session.
+ISOLATE=(env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_REMOTE_SESSION_ID -u CLAUDE_CODE_REMOTE -u CLAUDE_CODE_CHILD_SESSION
+  -u CLAUDE_CODE_SYNC_SESSION_REFS -u CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2 -u CLAUDE_CODE_TEE_SDK_STDOUT
+  -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDECODE -u CLAUDE_CODE_USE_CCR_V2
+  -u CLAUDE_CODE_REMOTE_SEND_KEEPALIVES -u CLAUDE_CODE_SESSION_ATTENDED -u CLAUDE_CODE_WORKER_EPOCH -u CLAUDE_PID -u CLAUDE_CODE_SYNC_SKILLS)
+CL=("${ISOLATE[@]}" claude -p --model "$MODEL" --settings "$WORK/settings.json" --output-format json
     --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(node:*),Bash(npm test:*),Bash(ls:*),Bash(mkdir:*)")
 # Prompts go through stdin because --allowedTools is variadic and would swallow a positional prompt.
 run() { local prompt="$1"; shift; printf '%s' "$prompt" | "${CL[@]}" "$@"; }
@@ -65,7 +71,7 @@ git checkout -q feature/rates
 git bundle create "$PL_ROOT/fixtures/demo.bundle" --all 2>/dev/null
 mkdir -p "$PL_ROOT/fixtures/transcripts"
 for id in $SID $SID_B $SID_C; do
-  f=$(ls ~/.claude/projects/*/"$id".jsonl | head -1); cp "$f" "$PL_ROOT/fixtures/transcripts/$id.jsonl"
+  f=$(ls ~/.claude/projects/*demo-rates/"$id".jsonl | head -1); cp "$f" "$PL_ROOT/fixtures/transcripts/$id.jsonl"
 done
 printf '{ "sessionA": "%s", "sessionB": "%s", "sessionC": "%s" }\n' "$SID" "$SID_B" "$SID_C" > "$PL_ROOT/fixtures/demo.json"
 echo "done: $REPO" >&2

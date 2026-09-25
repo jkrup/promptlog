@@ -124,3 +124,43 @@ export interface Review {
   slices: SessionSlice[];
   sessions: Record<string, Session>;
 }
+
+// ---------------------------------------------------------------------------
+// Contracts between feature areas (viewer <-> summarize, viewer <-> ask)
+// ---------------------------------------------------------------------------
+
+/** Output of src/summarize. The "taste" layer: what a reviewer should know without reading the log. */
+export interface ReviewSummary {
+  /** One or two sentences: what the human was trying to get done. */
+  intent: string;
+  /** How it was done, in reviewer terms. */
+  approach: string;
+  /** One line per turn. */
+  timeline: { sessionId: string; turn: number; gist: string }[];
+  decisions: { sessionId: string; turn: number; decision: string; rationale?: string; alternatives?: string[] }[];
+  /** Where the human corrected or redirected the AI. Often the most review-relevant moments. */
+  pushbacks: { sessionId: string; turn: number; humanSaid: string; aiChanged: string }[];
+  /** Raised in the conversation, never resolved. */
+  openLoops: { sessionId: string; turn: number; item: string }[];
+  assumptions: string[];
+  /** What the AI said it did vs what the diff shows. */
+  planVsDiff: { sessionId: string; turn: number; claim: string; status: 'done' | 'partial' | 'missing' | 'unclear'; evidence: string }[];
+  riskFlags: { severity: 'high' | 'medium' | 'low'; note: string; sessionId?: string; turn?: number }[];
+  /** Provenance. */
+  generatedAt: string;
+  model?: string;
+  promptVersion: string;
+}
+
+/** Output of src/ask: a question answered against the conversation + repo state at a turn. */
+export interface AskResult {
+  sessionId: string;
+  turn: number;
+  question: string;
+  answer: string;
+  /** Session id of the forked Claude Code session that answered (resumable). */
+  forkSessionId?: string;
+  askedAt: string;
+  askedBy?: string;
+  costUsd?: number;
+}
