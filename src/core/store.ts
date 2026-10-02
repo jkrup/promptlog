@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { catFileBatch, currentBranch, git, gitDir, gitMaybe, hashBlob, headSha, lsTree, mktree, type TreeEntry } from './git.ts';
-import { normalize, splitByTurn, transcriptFacts } from './transcript.ts';
+import { isCommandPrompt, normalize, splitByTurn, transcriptFacts } from './transcript.ts';
 import { REF_PREFIX, SCHEMA_VERSION, type FileChange, type Session, type SessionMeta, type TurnMeta } from './types.ts';
 
 export const turnDirName = (index: number) => String(index).padStart(6, '0');
@@ -336,7 +336,12 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
     startedAt: prevMeta?.startedAt ?? facts.startedAt ?? now,
     ...prevMeta,
     ...(facts.version ? { agentVersion: facts.version } : {}),
-    ...(facts.title ? { title: redact(facts.title) } : prevMeta?.title ? {} : { title: firstLine(normalized[0]?.prompt, 80) }),
+    // Without an agent title, name the session after its first real request (not `!ls` or a slash command).
+    ...(facts.title
+      ? { title: redact(facts.title) }
+      : prevMeta?.title && !isCommandPrompt(prevMeta.title)
+        ? {}
+        : { title: firstLine((normalized.find((t) => !isCommandPrompt(t.prompt)) ?? normalized[0])?.prompt, 80) }),
     ...(author ? { author: { name: author[1]!, email: author[2]! } } : {}),
     branch: currentBranch(root) ?? prevMeta?.branch ?? facts.branch,
     ...input.sessionPatch,

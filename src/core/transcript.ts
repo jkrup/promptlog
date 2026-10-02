@@ -82,6 +82,11 @@ export function cleanPromptText(text: string): string {
     .trim();
 }
 
+/** True for prompts that are terminal commands (`!ls`, bash mode) or slash commands, not requests to the agent. */
+export function isCommandPrompt(prompt: string): boolean {
+  return /^\s*(?:!|<bash-input>|<bash-stdout>|\/[a-z][\w:-]*(?:\s|$))/i.test(prompt);
+}
+
 function promptText(e: RawEntry): string {
   const blocks = blocksOf(e.message?.content);
   const parts = blocks.map((b) => (b.type === 'text' ? (b.text ?? '') : b.type === 'image' ? '[image]' : '')).filter(Boolean);
