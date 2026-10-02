@@ -90,16 +90,62 @@ export function clientMain(): void {
       if (next) showTab(next.dataset.tab ?? 'conversation', true);
     });
   }
+  // The full record is collapsed under the glance: open whatever holds a linked turn before scrolling to it.
+  const openTo = (el: Element | null) => {
+    for (let d = el?.closest('details'); d; d = d.parentElement?.closest('details')) (d as HTMLDetailsElement).open = true;
+  };
   const syncHash = () => {
-    if (!tabs.length) return;
     const h = location.hash.slice(1);
-    if (h === 'diff') showTab('diff');
-    else {
-      showTab('conversation');
-      if (h) document.getElementById(h)?.scrollIntoView();
+    const el = h ? document.getElementById(h) : null;
+    if (el) openTo(el);
+    if (tabs.length) {
+      if (h === 'diff') {
+        openTo(document.getElementById('diff'));
+        showTab('diff');
+        return;
+      }
+      if (!el || el.closest('#conversation')) showTab('conversation');
     }
+    el?.scrollIntoView();
   };
   window.addEventListener('hashchange', syncHash);
+  document.addEventListener('click', (ev) => {
+    const a = (ev.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="#"]');
+    const id = a?.getAttribute('href')?.slice(1);
+    if (!id || a?.dataset.tab) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    openTo(el);
+    if (tabs.length && el.closest('#conversation')) showTab('conversation');
+    // Same-hash clicks fire no hashchange; scroll explicitly once the details are open.
+    if (location.hash === `#${id}`) {
+      ev.preventDefault();
+      el.scrollIntoView();
+    }
+  });
+
+  // --- Glance (async): swap the rough outline for the Gemini version -----------------------------
+  const loadGlance = async () => {
+    const glance = document.getElementById('glance');
+    if (!glance?.dataset.src) return;
+    try {
+      const res = await fetch(glance.dataset.src);
+      const data = (await res.json()) as { ok?: boolean; glance?: string; files?: string; headline?: string; error?: string };
+      if (!res.ok || !data.ok || !data.glance) throw new Error(data.error ?? `HTTP ${res.status}`);
+      glance.outerHTML = data.glance;
+      const h1 = document.querySelector<HTMLElement>('h1[data-headline]');
+      if (h1 && data.headline) {
+        h1.textContent = data.headline;
+        document.title = `${data.headline} · promptlog`;
+      }
+      const files = document.getElementById('files');
+      if (files && data.files) files.outerHTML = data.files;
+      localize(document);
+    } catch (e) {
+      const prov = glance.querySelector<HTMLElement>('.glance-prov');
+      if (prov) prov.textContent = `rough outline from the prompts · Gemini version failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300);
+    }
+  };
 
   // --- Summary (async) ----------------------------------------------------------------------------
   const summary = document.getElementById('summary');
@@ -137,10 +183,13 @@ export function clientMain(): void {
     }
   };
   document.addEventListener('click', (ev) => {
-    const btn = (ev.target as HTMLElement).closest('[data-summary-refresh]');
-    if (!btn || !summary) return;
-    summary.innerHTML = '<div class="sum-head"><h2>Summary</h2><span class="sum-prov muted">regenerating</span></div><div class="sum-loading" role="status"><div class="spinner" aria-hidden="true"></div><div><strong>Regenerating…</strong><div class="muted small"><span data-elapsed></span></div></div></div>';
-    void loadSummary(true);
+    const target = ev.target as HTMLElement;
+    const refresh = target.closest('[data-summary-refresh]');
+    const run = target.closest('[data-summary-run]');
+    if ((!refresh && !run) || !summary) return;
+    const what = refresh ? 'Regenerating…' : 'Claude Code is reading the whole conversation and diff…';
+    summary.innerHTML = `<div class="sum-head"><h2>Deep review</h2><span class="sum-prov muted">running</span></div><div class="sum-loading" role="status"><div class="spinner" aria-hidden="true"></div><div><strong>${what}</strong><div class="muted small">Uses your Claude plan; about a minute. <span data-elapsed></span></div></div></div>`;
+    void loadSummary(!!refresh);
   });
 
   // --- Ask at this turn -----------------------------------------------------------------------
@@ -157,7 +206,7 @@ export function clientMain(): void {
     button.disabled = true;
     status.className = 'ask-status pending';
     const started = Date.now();
-    const tick = () => (status.textContent = `Asking Claude at this turn's repo state… ${Math.round((Date.now() - started) / 1000)}s`);
+    const tick = () => (status.textContent = `Claude Code is reopening the repo as it was at this turn (your Claude plan)… ${Math.round((Date.now() - started) / 1000)}s`);
     tick();
     const timer = window.setInterval(tick, 1000);
     try {
@@ -186,8 +235,54 @@ export function clientMain(): void {
     }
   });
 
+  // --- Quick ask (whole page; Jev + Gemini) ----------------------------------------------------
+  document.addEventListener('submit', async (ev) => {
+    const form = (ev.target as HTMLElement).closest<HTMLFormElement>('form[data-qask]');
+    if (!form) return;
+    ev.preventDefault();
+    const sec = form.closest('section') ?? form.parentElement;
+    const input = form.querySelector<HTMLInputElement>('input[name="question"]');
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const status = sec?.querySelector<HTMLElement>('.ask-status');
+    const question = input?.value.trim() ?? '';
+    if (!question || !input || !button || !status) return;
+    input.disabled = true;
+    button.disabled = true;
+    status.className = 'ask-status pending';
+    const started = Date.now();
+    const tick = () => (status.textContent = `Finding the relevant turns and answering… ${Math.round((Date.now() - started) / 1000)}s`);
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    try {
+      const res = await fetch('/api/quick-ask', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: form.dataset.target, question }),
+      });
+      const data = (await res.json()) as { ok?: boolean; html?: string; error?: string };
+      if (!res.ok || !data.ok || !data.html) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const list = sec?.querySelector<HTMLElement>('[data-qasks]');
+      if (list) {
+        list.insertAdjacentHTML('afterbegin', data.html);
+        localize(list);
+      }
+      input.value = '';
+      status.textContent = '';
+      status.className = 'ask-status';
+    } catch (e) {
+      status.className = 'ask-status err';
+      status.textContent = e instanceof Error ? e.message : String(e);
+    } finally {
+      window.clearInterval(timer);
+      input.disabled = false;
+      button.disabled = false;
+    }
+  });
+
   localize(document);
   clamp(document);
   syncHash();
-  void loadSummary(false);
+  // The deep review uses the reader's Claude plan, so it only runs on load when a page asks for it explicitly.
+  if (summary?.dataset.autoload === '1') void loadSummary(false);
+  void loadGlance();
 }

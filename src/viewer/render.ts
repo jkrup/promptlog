@@ -1,13 +1,13 @@
 // Pure render functions: view model in, HTML string out. No Node APIs and no framework, so this can
 // later run on Cloudflare Workers. Every piece of transcript/git text goes through html`` (escaped)
 // or renderMarkdown (escape-first); raw() is reserved for markup built in this directory.
-import type { AskResult, FileChange, ReviewSummary, Session, SessionSlice, Turn, TurnItem } from '../core/types.ts';
+import type { AskResult, FileChange, Glance, Leftover, QuickAskInfo, ReviewSummary, Session, SessionSlice, Turn, TurnItem } from '../core/types.ts';
 import { clientMain } from './client.ts';
-import { counts, diffStats, parseDiff, renderDiff, statusBadge } from './diff.ts';
+import { counts, diffStats, parseDiff, renderDiff, splitDiffText, statusBadge } from './diff.ts';
 import { clip, html, join, plural, qs, raw, toHtml, type Html, type Safe } from './html.ts';
 import { inline, plainPreview, renderMarkdown } from './markdown.ts';
 import { CSS } from './styles.ts';
-import { turnKey, type ExtrasMap, type Features, type IndexPageModel, type ReviewPageModel, type SessionPageModel, type TurnExtras } from './types.ts';
+import { turnKey, type ExtrasMap, type FeatureState, type Features, type GlanceBlock, type IndexPageModel, type ReviewPageModel, type SessionPageModel, type TurnExtras } from './types.ts';
 
 export { renderDiff } from './diff.ts';
 export { renderMarkdown } from './markdown.ts';
@@ -450,13 +450,13 @@ function askBox(ctx: RenderCtx, sessionId: string, turn: number, asks: AskResult
   const id = `ask-${sessionId}-${turn}`;
   const past = html`<div class="asks" data-asks>${(asks ?? []).map(renderAskResult)}</div>`;
   if (!ctx.features.ask.available) {
-    return html`${past}<div class="ask ask-off"><span class="ask-ico" aria-hidden="true">?</span><span>Ask at ${label}</span><span class="muted">· not available yet</span></div>`;
+    return html`${past}<div class="ask ask-off"><span class="ask-ico" aria-hidden="true">?</span><span>Deep ask at ${label}</span><span class="muted">· not available yet</span></div>`;
   }
   return html`${past}<form class="ask" data-ask data-session="${sessionId}" data-turn="${turn}" autocomplete="off">
-<label class="sr-only" for="${id}">Ask a question at ${label}</label>
+<label class="sr-only" for="${id}">Deep ask at ${label}</label>
 <span class="ask-ico" aria-hidden="true">?</span>
-<input id="${id}" name="question" type="text" placeholder="Ask about the code and chat as of ${label}…" title="Answered against the conversation and repo exactly as they were at ${label}" required>
-<button type="submit">Ask</button>
+<input id="${id}" name="question" type="text" placeholder="Deep ask at ${label}: Claude Code reopens the repo as it was then (your Claude plan, ~1 min)" title="Runs Claude Code on your machine with your Claude plan, in a copy of the repo exactly as it was at ${label}. For most questions, use the quick Ask box at the top." required>
+<button type="submit">Deep ask</button>
 <div class="ask-status" aria-live="polite"></div>
 </form>`;
 }
@@ -531,6 +531,15 @@ export function renderSummaryLoading(urls: SummaryUrls, turns: number): Safe {
   <div><strong>Reading ${plural(turns, 'turn')} so you don't have to…</strong><div class="muted small">Intent, pushbacks, open loops and a plan-vs-diff check. First run calls Claude and can take a minute; <span data-elapsed></span></div></div>
 </div>
 <div class="skeleton" aria-hidden="true"><span style="width:92%"></span><span style="width:78%"></span><span style="width:85%"></span></div>`;
+}
+
+/** The deep review doesn't run on page load: it uses the reviewer's Claude plan, so it waits for a click. */
+export function renderSummaryIdle(turns: number): Safe {
+  return html`<div class="sum-head"><h2>Deep review</h2></div>
+<div class="sum-idle">
+  <div><strong>Pushbacks, open loops, plan vs diff and risks</strong><div class="muted small">Claude Code reads all ${plural(turns, 'turn')} and the diff. Uses your Claude plan and takes about a minute; cached after the first run.</div></div>
+  <button type="button" class="act primary" data-summary-run>Run deep review</button>
+</div>`;
 }
 
 export function renderSummaryUnavailable(reason: string, urls: SummaryUrls): Safe {
@@ -674,6 +683,202 @@ export function summaryAnnotations(ctx: RenderCtx, s: ReviewSummary): Map<string
 // Review page
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// At a glance: one "asked / did" line per turn, then each changed file with why and where
+// ---------------------------------------------------------------------------
+
+const firstName = (name: string | undefined) => name?.trim().split(/\s+/)[0] || 'Human';
+const fileAnchor = (path: string) => `f-${path.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+
+const VERDICT_TEXT: Record<string, string> = { yes: 'Yes', no: 'No', partly: 'Partly', unclear: 'Unclear', 'not discussed': 'Not discussed' };
+
+export interface GlanceParts {
+  glance: Safe;
+  files: Safe;
+}
+
+/** The glance and files sections for a page. `sessions` are the sessions the glance's turns come from. */
+export function renderGlanceParts(
+  ctx: RenderCtx,
+  sessions: Session[],
+  g: Glance,
+  diff: string,
+  o: { src?: string; glanceFeature?: FeatureState; headlineInBox?: boolean; leftovers?: Leftover[] } = {},
+): GlanceParts {
+  const byId = new Map(sessions.map((s) => [s.meta.sessionId, s]));
+  const turnOf = (sid: string, n: number) => byId.get(sid)?.turns.find((t) => t.index === n);
+  const touched = new Map<string, { sessionId: string; turn: number }[]>();
+  for (const t of g.turns) for (const f of turnOf(t.sessionId, t.turn)?.meta?.filesChanged ?? []) touched.set(f.path, [...(touched.get(f.path) ?? []), { sessionId: t.sessionId, turn: t.turn }]);
+
+  const prov =
+    g.source === 'gemini'
+      ? `written by ${g.model ?? 'Gemini'} from per-turn notes`
+      : o.src
+        ? 'rough outline from the prompts · Gemini version loading…'
+        : `rough outline from the prompts${o.glanceFeature && !o.glanceFeature.available ? ` · ${o.glanceFeature.reason}` : ''}`;
+
+  // Key turns only; terminal commands and small talk fold into one line so the glance stays short.
+  const key = g.turns.filter((t) => !t.minor);
+  const minor = key.length ? g.turns.filter((t) => t.minor) : [];
+  const rows = (key.length ? key : g.turns).map((t) => {
+    const aid = anchorId(t.sessionId, t.turn);
+    const color = ctx.labels.get(t.sessionId)?.color ?? 0;
+    const lbl = turnLabel(ctx, t.sessionId, t.turn);
+    const turn = turnOf(t.sessionId, t.turn);
+    const nFiles = turn?.meta?.filesChanged?.length ?? 0;
+    const commits = turn?.meta?.commits ?? [];
+    return html`<li class="gt c${color}"><a class="tlabel" href="#${aid}">${lbl}</a>
+<div class="gt-body">
+  <div class="gt-line"><span class="gt-who">${firstName(byId.get(t.sessionId)?.meta.author?.name)}</span><span class="gt-text">${md1(t.asked)}</span></div>
+  <div class="gt-line"><span class="gt-who gt-ai">Claude</span><span class="gt-text">${md1(t.did)}</span></div>
+  ${nFiles || commits.length ? html`<div class="gt-meta">${nFiles ? plural(nFiles, 'file') : ''}${nFiles && commits.length ? ' · ' : ''}${commits.length ? html`committed ${join(commits.map((c) => html`<code>${short(c)}</code>`), ', ')}` : ''}</div>` : ''}
+</div></li>`;
+  });
+  if (minor.length) {
+    rows.push(html`<li class="gt gt-fold"><span class="gt-fold-k">Also</span>${join(minor.map((t) => html`<a class="tref" href="#${anchorId(t.sessionId, t.turn)}">${turnLabel(ctx, t.sessionId, t.turn)}</a> <span>${md1(t.asked)}</span>`), html`<span class="dot">·</span>`)}</li>`);
+  }
+
+  const beyond = g.beyond ?? [];
+  const beyondBlock = beyond.length
+    ? html`<div class="beyond" id="beyond">
+<h3>Beyond what was asked <span class="count">${beyond.length}</span></h3>
+<ul>${beyond.map(
+        (b) => html`<li>
+<div class="bw-change">${md1(b.change)}${b.paths.length ? html` <span class="bw-where">${b.paths.map((p) => html`<a href="#${fileAnchor(p)}"><code>${displayPath(ctx, p)}</code></a>`)}</span>` : ''}</div>
+<div class="bw-reason${b.reason ? '' : ' none'}">${b.reason ? html`<span class="muted">Claude's reason:</span> ${md1(b.reason)}` : b.mentioned ? 'No reason given in the conversation.' : 'Never mentioned in the conversation. Only the diff shows it.'}</div>
+</li>`,
+      )}</ul>
+</div>`
+    : '';
+
+  // "Did it change it everywhere?": each name the work took out, and where the code still has it. git grep, no model.
+  const left = o.leftovers ?? [];
+  const changed = new Set(parseDiff(diff).map((f) => f.newPath));
+  const hitPath = (p: string, line: number) => {
+    const label = html`<code>${displayPath(ctx, p)}:${line}</code>`;
+    return changed.has(p) ? html`<a href="#${fileAnchor(p)}">${label}</a>` : label;
+  };
+  const everywhereBlock = left.length
+    ? html`<div class="everywhere" id="everywhere">
+<h3>Did it change it everywhere? <span class="ev-prov">code search, no AI</span></h3>
+<ul>${left.map((l) => {
+        const untouched = l.stillIn.filter((h) => !h.wrote);
+        const written = l.stillIn.filter((h) => h.wrote);
+        const missed = untouched.length + l.more;
+        const status = missed
+          ? `Still in ${plural(missed, 'place')} this change didn't touch:`
+          : written.length
+            ? `Only left on ${plural(written.length, 'line')} this change wrote:`
+            : 'Gone everywhere.';
+        const row = (h: Leftover['stillIn'][number]) => html`<li${h.wrote ? html` class="ev-wrote"` : ''}>${hitPath(h.path, h.line)} <code class="ev-text">${h.text}</code>${h.wrote && missed ? html` <span class="ev-tag">written by this change</span>` : ''}</li>`;
+        return html`<li class="${missed ? 'ev-left' : 'ev-gone'}">
+<div class="ev-name"><code>${l.name}</code> <span class="muted">taken out of ${join(l.removedFrom.map((p) => html`<code>${displayPath(ctx, p)}</code>`), ', ')}</span></div>
+<div class="ev-status">${status}</div>
+${l.stillIn.length || l.more ? html`<ol class="ev-hits">${untouched.map(row)}${l.more ? html`<li class="more">and ${l.more} more</li>` : ''}${written.map(row)}</ol>` : ''}
+</li>`;
+      })}</ul>
+</div>`
+    : '';
+
+  const glance = html`<section class="glance" id="glance" aria-label="At a glance" aria-live="polite"${o.src ? html` data-src="${o.src}"` : ''}>
+<div class="glance-head"><h2>At a glance</h2><span class="glance-prov muted">${prov}</span></div>
+${g.headline && o.headlineInBox !== false ? html`<p class="glance-headline">${md1(g.headline)}</p>` : ''}
+${rows.length ? html`<ol class="glance-turns">${rows}</ol>` : html`<div class="empty-note">No turns.</div>`}
+${beyondBlock}
+${everywhereBlock}
+</section>`;
+
+  const parsed = parseDiff(diff);
+  const stats = new Map(parsed.map((f) => [f.newPath, f]));
+  const chunks = splitDiffText(diff);
+  const st = diffStats(parsed);
+  const fileRows = g.files.map((f) => {
+    const d = stats.get(f.path);
+    const by = touched.get(f.path) ?? [];
+    return html`<li><details class="fw" id="${fileAnchor(f.path)}"><summary>
+<span class="fw-top">${d ? statusBadge(d.status) : ''}<code class="fw-path">${displayPath(ctx, f.path)}</code>${d ? counts(d.additions, d.deletions) : ''}${by.length ? html`<span class="fw-by">${by.map((b) => turnRef(ctx, b.sessionId, b.turn))}</span>` : ''}<span class="fw-open" aria-hidden="true">diff</span></span>
+${f.why ? html`<span class="fw-why">${md1(f.why)}</span>` : ''}
+${f.spots.length ? html`<ol class="fw-spots">${f.spots.map((sp) => html`<li class="${sp.kind}"><span class="ln">${sp.kind === 'del' ? '−' : '+'}${sp.line}</span><code>${sp.text}</code></li>`)}${f.moreSpots ? html`<li class="more">and ${plural(f.moreSpots, 'more changed line')}</li>` : ''}</ol>` : ''}
+</summary>
+<div class="fw-diff">${renderDiff(chunks.get(f.path) ?? '', { emptyText: 'No diff available for this file.' })}</div>
+</details></li>`;
+  });
+  const files = html`<section class="files-why" id="files" aria-label="Files changed">
+<div class="glance-head"><h2>Files changed</h2>${parsed.length ? html`<span class="muted small">${plural(st.files, 'file')} ${counts(st.additions, st.deletions)}</span>` : ''}</div>
+${fileRows.length ? html`<ul class="fw-list">${fileRows}</ul>` : html`<div class="empty-note">No file changes.</div>`}
+</section>`;
+  return { glance, files };
+}
+
+/**
+ * The yes/no chip follows the written answer when it starts with one, with Jev's own answer beside it
+ * (agreeing or not); otherwise it shows Jev's answer.
+ */
+function verdictChip(q: QuickAskInfo | undefined, answer: string): Safe | '' {
+  const v = q?.verdict;
+  // Older asks predate `lead`; read it off the answer the same way.
+  const lead = q?.lead ?? (v ? (/^\W*(yes|no)\b/i.exec(answer)?.[1]?.toLowerCase() as 'yes' | 'no' | undefined) : undefined);
+  if (!lead && !v) return '';
+  const label = lead ?? v!.label;
+  const pct = v ? Math.round(v.confidence * 100) : 0;
+  const jev = !v ? '' : !lead ? `Jev, ${pct}% sure` : v.label === lead ? `Jev agrees, ${pct}% sure` : v.label === 'unclear' ? 'Jev unsure' : `Jev leaned ${VERDICT_TEXT[v.label]?.toLowerCase() ?? v.label} (${pct}%)`;
+  return html`<div class="qa-verdict v-${label.replace(/\s+/g, '-')}"><strong>${VERDICT_TEXT[label] ?? label}</strong>${jev ? html`<span class="muted"> · ${jev}</span>` : ''}</div>`;
+}
+
+/** One quick ask: verdict chip, answer, where it looked. */
+export function renderQuickAskResult(a: AskResult): Safe {
+  const q = (a as { quick?: QuickAskInfo }).quick;
+  const v = q?.verdict;
+  const multi = new Set((q?.scores ?? []).map((s) => s.sessionId)).size > 1;
+  const lbl = (u: { sessionId: string; turn: number }) => (multi ? `${u.sessionId.slice(0, 8)} turn ${u.turn}` : `turn ${u.turn}`);
+  const used = q?.used ?? [];
+  const meta: Html[] = [
+    time(a.askedAt),
+    used.length ? html`from ${join(used.map((u) => html`<a href="#${anchorId(u.sessionId, u.turn)}">${lbl(u)}</a>`), ', ')}` : 'no turn matched',
+    q ? `${q.models.jev} + ${q.models.gemini}` : '',
+    a.askedBy ?? '',
+  ];
+  return html`<div class="ask-item qa">
+<div class="ask-q"><span class="ask-q-ico" aria-hidden="true">?</span>${a.question}</div>
+${verdictChip(q, a.answer)}
+<div class="ask-a md">${renderMarkdown(a.answer)}</div>
+${q?.codeSearch ? html`<div class="qa-search small">Searched ${q.codeSearch.where} for ${join(q.codeSearch.patterns.map((p) => html`<code>${p.text}</code> <span class="muted">(${p.matches === 1 ? '1 match' : `${p.matches} matches`})</span>`), ', ')}</div>` : ''}
+<div class="ask-meta">${join(meta, ' · ')}</div>
+</div>`;
+}
+
+/** The page-level ask box: quick answers about the whole page (Jev + Gemini), not the user's Claude plan. */
+export function renderQuickAsk(block: Pick<GlanceBlock, 'target' | 'asks'>, f: FeatureState | undefined): Safe {
+  const past = html`<div class="qasks" data-qasks>${block.asks.map(renderQuickAskResult)}</div>`;
+  if (!f?.available) {
+    return html`<section class="qask-sec" id="ask" aria-label="Ask about this work"><div class="qask qask-off"><span class="ask-ico" aria-hidden="true">?</span><span>Ask about this work</span><span class="muted">· ${f ? f.reason : 'not set up'}</span></div>${past}</section>`;
+  }
+  return html`<section class="qask-sec" id="ask" aria-label="Ask about this work">
+<form class="qask" data-qask data-target="${block.target}" autocomplete="off">
+<label class="sr-only" for="qask-input">Ask about this work</label>
+<span class="ask-ico" aria-hidden="true">?</span>
+<input id="qask-input" name="question" type="text" placeholder="Ask about this work, e.g. “did it swap every URL?”" required>
+<button type="submit">Ask</button>
+</form>
+<div class="qask-note muted small">Answers in seconds from the turn notes, the relevant turns and, when it helps, a search of the code. Uses Jev + Gemini Flash, not your Claude plan.</div>
+<div class="ask-status" aria-live="polite"></div>
+${past}
+</section>`;
+}
+
+/** Collapsed by default: the page leads with the glance; the full record is one click away. */
+function fullRecord(title: string, sub: string, body: Safe): Safe {
+  return html`<details class="full" id="full"><summary><span class="full-title">${title}</span><span class="muted small">${sub}</span></summary>
+<div class="full-body">${body}</div>
+</details>`;
+}
+
+export function sessionCtx(s: Session, features: Features): RenderCtx {
+  const known: string[] = [];
+  for (const t of s.turns) for (const f of t.meta?.filesChanged ?? []) known.push(f.path);
+  return { labels: makeLabels([s.meta.sessionId]), single: true, features, pathPrefixes: learnPathPrefixes([s], known) };
+}
+
 export function reviewCtx(m: Pick<ReviewPageModel, 'review' | 'features'>, diffPaths: string[] = []): RenderCtx {
   const { review } = m;
   const sessions = Object.values(review.sessions);
@@ -750,7 +955,7 @@ export function renderReviewPage(m: ReviewPageModel): string {
   if (m.summary) summaryInner = renderSummary(ctx, m.summary.data, { mock: m.summary.mock, hideHref: reviewUrl(review.base, review.head) });
   else if (!m.features.summary.available) summaryInner = renderSummaryUnavailable(m.features.summary.reason, summaryUrls);
   else {
-    summaryInner = renderSummaryLoading(summaryUrls, totalTurns);
+    summaryInner = renderSummaryIdle(totalTurns);
     summaryAttrs = toHtml(html` data-src="${summaryUrls.api}"`);
   }
   const summary = html`<section class="summary" id="summary" aria-label="Summary" aria-live="polite"${raw(summaryAttrs)}>${summaryInner}</section>`;
@@ -777,11 +982,14 @@ ${sl.toTurn < s.turns.length ? html`<div class="slice-note">The session continue
 <a class="tab" role="tab" id="tab-diff" href="#diff" aria-controls="diff" aria-selected="false" data-tab="diff">Code diff <span class="count">${plural(st.files, 'file')} ${counts(st.additions, st.deletions)}</span></a>
 </div>`;
 
-  const body = html`${hero}${summary}${tabs}
+  const panels = html`${tabs}
 <section class="tabpanel" id="conversation" role="tabpanel" aria-labelledby="tab-conversation">${conversation.length ? conversation : html`<div class="empty-note">No conversation slices for this range. Commits here weren't made in a captured session.</div>`}</section>
 <section class="tabpanel" id="diff" role="tabpanel" aria-labelledby="tab-diff"><div class="diff-intro muted small"><code>git diff ${short(review.mergeBase)}..${review.head}</code>. The code is the compiled output; the conversation is the source.</div>${renderDiff(m.diff, { emptyText: 'No code changes in this range.', truncated: m.diffTruncated })}</section>`;
 
   const sessions = Object.values(review.sessions);
+  const parts = m.glance ? renderGlanceParts(ctx, sessions, m.glance.glance, m.diff, { src: m.glance.src, glanceFeature: m.features.glance, leftovers: m.glance.leftovers }) : null;
+  const full = fullRecord('Full conversation and code diff', `${plural(totalTurns, 'turn')} · every prompt, reply and tool call · deep ask at any turn`, panels);
+  const body = parts && m.glance ? html`${hero}${parts.glance}${renderQuickAsk(m.glance, m.features.quick)}${parts.files}${summary}${full}` : html`${hero}${summary}${panels}`;
   return renderPage({
     title: `${review.base}..${review.head} · promptlog`,
     crumbs: html`${m.repoName ? html`<a href="/">${m.repoName}</a><span class="sep">/</span>` : ''}<span>review</span><span class="sep">/</span><code>${review.head}</code>`,
@@ -797,9 +1005,8 @@ ${sl.toTurn < s.turns.length ? html`<div class="slice-note">The session continue
 export function renderSessionPage(m: SessionPageModel): string {
   const s = m.session;
   const sid = s.meta.sessionId;
-  const known: string[] = [];
-  for (const t of s.turns) for (const f of t.meta?.filesChanged ?? []) known.push(f.path);
-  const ctx: RenderCtx = { labels: makeLabels([sid]), single: true, features: m.features, pathPrefixes: learnPathPrefixes([s], known) };
+  const ctx = sessionCtx(s, m.features);
+  const title = m.glance?.glance.headline || s.meta.title || sid;
   const models = sessionModels(s);
   const commits = s.turns.flatMap((t) => (m.extras[turnKey(sid, t.index)]?.commits ?? (t.meta?.commits ?? []).map((sha) => ({ sha, subject: '' }))).map((c) => ({ ...c, turn: t.index })));
   const last = s.turns[s.turns.length - 1];
@@ -811,16 +1018,21 @@ export function renderSessionPage(m: SessionPageModel): string {
     html`<span>${plural(s.turns.length, 'turn')}</span>`,
     html`<span>${time(s.meta.startedAt)}${last?.meta?.endedAt ? html` → ${time(last.meta.endedAt)}` : ''}</span>`,
   ];
-  const body = html`<section class="hero">
+  const hero = html`<section class="hero">
 <div class="eyebrow">Session <code>${sid}</code></div>
-<h1>${s.meta.title ?? sid}</h1>
+<h1 data-headline>${title}</h1>
 <p class="lede facts">${join(facts, html`<span class="dot" aria-hidden="true">·</span>`)}</p>
 ${s.meta.parent ? html`<p class="slice-note">Forked from <a href="/session/${s.meta.parent.sessionId}#${anchorId(s.meta.parent.sessionId, s.meta.parent.turn)}">${s.meta.parent.sessionId.slice(0, 8)} turn ${s.meta.parent.turn}</a>.</p>` : ''}
 ${commits.length ? html`<div class="flow-k">Commits made in this session</div><ol class="commits">${commits.map((c) => html`<li><code class="sha" title="${c.sha}">${short(c.sha)}</code><span class="csub">${c.subject}</span>${turnRef(ctx, sid, c.turn)}</li>`)}</ol>` : ''}
-</section>
-<section class="slice c0" id="conversation">${s.turns.map((t) => renderTurn(ctx, s, t, m.extras[turnKey(sid, t.index)]))}</section>`;
+</section>`;
+  const conversation = html`<section class="slice c0" id="conversation">${s.turns.map((t) => renderTurn(ctx, s, t, m.extras[turnKey(sid, t.index)]))}</section>`;
+  // The headline is the page title here, so the glance box doesn't repeat it (the client upgrades the h1).
+  const parts = m.glance ? renderGlanceParts(ctx, [s], m.glance.glance, m.diff ?? '', { src: m.glance.src, glanceFeature: m.features.glance, headlineInBox: false, leftovers: m.glance.leftovers }) : null;
+  const body = parts && m.glance
+    ? html`${hero}${parts.glance}${renderQuickAsk(m.glance, m.features.quick)}${parts.files}${fullRecord('Full conversation', `${plural(s.turns.length, 'turn')} · every prompt, reply and tool call · deep ask at any turn`, conversation)}`
+    : html`${hero}${conversation}`;
   return renderPage({
-    title: `${s.meta.title ?? sid} · promptlog`,
+    title: `${title} · promptlog`,
     crumbs: html`${m.repoName ? html`<a href="/">${m.repoName}</a><span class="sep">/</span>` : ''}<span>session</span><span class="sep">/</span><code>${sid.slice(0, 8)}</code>`,
     body,
     thinking: countThinking([s], () => true),
@@ -857,7 +1069,7 @@ ${b.exists && b.branch !== b.base ? html`<a class="act primary" href="${reviewUr
 <td>${s.author ?? ''}</td><td>${time(s.updatedAt)}</td>
 </tr>`,
       )}</tbody></table></div>`
-    : html`<div class="empty-note">No sessions captured yet. Run <code>pl install</code>, then use Claude Code in this repo.</div>`;
+    : html`<div class="empty-note">No sessions captured yet. Run <code>promptlog install</code>, then use Claude Code in this repo.</div>`;
 
   const body = html`<section class="hero">
 <div class="eyebrow">Repository</div>

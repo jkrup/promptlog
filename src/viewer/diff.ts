@@ -89,6 +89,17 @@ export function parseDiff(text: string): DiffFile[] {
   return files;
 }
 
+/** A multi-file diff split per file, keyed by the new path (old path for deletions). */
+export function splitDiffText(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const part of text.split(/^(?=diff --git )/m)) {
+    if (!part.startsWith('diff --git ')) continue;
+    const f = parseDiff(part)[0];
+    if (f) out.set(f.status === 'D' ? f.oldPath : f.newPath, part);
+  }
+  return out;
+}
+
 export function diffStats(files: DiffFile[]): { files: number; additions: number; deletions: number } {
   return files.reduce((a, f) => ({ files: a.files + 1, additions: a.additions + f.additions, deletions: a.deletions + f.deletions }), { files: 0, additions: 0, deletions: 0 });
 }

@@ -1,4 +1,4 @@
-// `pl view` server: node:http, bound to 127.0.0.1 only. Pages are rendered by the pure functions in
+// `promptlog view` server: node:http, bound to 127.0.0.1 only. Pages are rendered by the pure functions in
 // render.ts; this file does routing, git access (via model.ts) and the optional ask/summarize modules.
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -6,14 +6,18 @@ import type { AddressInfo } from 'node:net';
 import { gitMaybe } from '../core/git.ts';
 import { assembleReview, parseRange } from '../core/review.ts';
 import type { AskResult, Review, ReviewSummary } from '../core/types.ts';
-import { renderDiff } from './diff.ts';
+import { parseDiff, renderDiff } from './diff.ts';
 import { toHtml } from './html.ts';
-import { loadAsk, loadSummarize, type AskModule, type Loaded, type SummarizeModule } from './integrations.ts';
+import { loadAsk, loadQuick, loadSummarize, type AskModule, type Loaded, type QuickModule, type SummarizeModule } from './integrations.ts';
 import { mockSummary } from './mock.ts';
-import { buildIndexModel, buildReviewModel, buildSessionModel, isSafeRev, isSafeSessionId, resolveSession, turnDiff, turnRaw } from './model.ts';
+import { buildIndexModel, buildReviewModel, buildSessionModel, displayTitle, isSafeRev, isSafeSessionId, resolveSession, turnDiff, turnRaw } from './model.ts';
 import {
   PAGE_SCRIPTS,
   renderAskResult,
+  renderGlanceParts,
+  renderQuickAskResult,
+  reviewCtx,
+  sessionCtx,
   renderErrorPage,
   renderIndexPage,
   renderRawLog,
@@ -24,12 +28,13 @@ import {
   renderSummaryUnavailable,
   reviewUrl,
 } from './render.ts';
-import type { Features } from './types.ts';
+import type { FeatureState, Features } from './types.ts';
 
 export interface ViewerModules {
   /** undefined: load src/ask dynamically. null: treat as not installed. */
   ask?: AskModule | null;
   summarize?: SummarizeModule | null;
+  quick?: QuickModule | null;
 }
 
 export interface ServerOptions {
@@ -126,16 +131,39 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
         ? { ok: true, mod: opts.modules.summarize }
         : loadSummarize();
 
-  const features = async (): Promise<{ features: Features; ask: Loaded<AskModule> }> => {
-    const [ask, sum] = await Promise.all([askMod(), summarizeMod()]);
+  const quickMod = async (): Promise<Loaded<QuickModule>> =>
+    opts.modules?.quick === null ? { ok: false, reason: 'Quick asks (src/quick) aren\'t installed in this build.' } : opts.modules?.quick ? { ok: true, mod: opts.modules.quick } : loadQuick();
+
+  /** The glance needs a Gemini key; quick asks need that plus a decision endpoint (Jev / Dopp). */
+  const quickFeatures = (q: Loaded<QuickModule>): { glance: FeatureState; quick: FeatureState } => {
+    if (!q.ok) return { glance: { available: false, reason: q.reason }, quick: { available: false, reason: q.reason } };
+    try {
+      q.mod.repoGeminiClient(cwd);
+    } catch {
+      const reason = 'no Gemini key found; add one to ~/.config/promptlog/config.json for the full summary (docs/quick-ask.md)';
+      return { glance: { available: false, reason }, quick: { available: false, reason: 'needs a Gemini key and a decision endpoint in ~/.config/promptlog/config.json (docs/quick-ask.md)' } };
+    }
+    try {
+      q.mod.decisionClient(cwd);
+    } catch {
+      return { glance: { available: true }, quick: { available: false, reason: 'needs a decision endpoint in ~/.config/promptlog/config.json (docs/quick-ask.md)' } };
+    }
+    return { glance: { available: true }, quick: { available: true } };
+  };
+
+  const features = async (): Promise<{ features: Features; ask: Loaded<AskModule>; quick: Loaded<QuickModule> }> => {
+    const [ask, sum, quick] = await Promise.all([askMod(), summarizeMod(), quickMod()]);
     return {
       ask,
+      quick,
       features: {
         ask: ask.ok ? { available: true } : { available: false, reason: ask.reason },
         summary: sum.ok ? { available: true } : { available: false, reason: sum.reason },
+        ...quickFeatures(quick),
       },
     };
   };
+  const glances = new Map<string, Promise<unknown>>();
 
   const pastAsks = async (ask: Loaded<AskModule>, sessionIds: string[]): Promise<Map<string, AskResult[]>> => {
     const out = new Map<string, AskResult[]>();
@@ -197,6 +225,7 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
       const f = await features();
       const model = buildReviewModel(cwd, base, head, { features: f.features, review, asks: await pastAsks(f.ask, review.slices.map((s) => s.sessionId)) });
       if (url.searchParams.get('mockSummary') === '1') model.summary = { data: mockSummary(review), mock: true };
+      if (model.glance && f.features.glance?.available) model.glance.src = `/api/glance?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`;
       return send(res, 200, 'text/html', renderReviewPage(model));
     }
 
@@ -206,6 +235,7 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
       const f = await features();
       const model = buildSessionModel(cwd, id, { features: f.features, asks: await pastAsks(f.ask, [id]) });
       if (!model) throw new HttpError(404, `no session ${id}`);
+      if (model.glance && f.features.glance?.available) model.glance.src = `/api/glance?session=${encodeURIComponent(id)}`;
       return send(res, 200, 'text/html', renderSessionPage(model));
     }
 
@@ -256,6 +286,75 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         return sendJson(res, 500, { ok: false, error: msg, html: toHtml(renderSummaryError(msg)) });
+      }
+    }
+
+    if (method === 'GET' && path === '/api/glance') {
+      const f = await features();
+      if (!f.quick.ok || !f.features.glance?.available) return sendJson(res, 501, { ok: false, error: f.features.glance?.available === false ? f.features.glance.reason : 'unavailable' });
+      const q = f.quick.mod;
+      const sidParam = url.searchParams.get('session');
+      let render: (g: Awaited<ReturnType<QuickModule['buildGlance']>>) => { glance: string; files: string; headline?: string };
+      let input: Parameters<QuickModule['buildGlance']>[1];
+      let key: string;
+      if (sidParam) {
+        const id = sessionParam(sidParam);
+        const m = buildSessionModel(cwd, id, { features: f.features });
+        if (!m) throw new HttpError(404, `no session ${id}`);
+        input = { items: [{ sessionId: id, turns: m.session.turns }], diff: m.diff ?? '', title: displayTitle(m.session.meta.title) };
+        key = `s:${id}:${gitMaybe(['rev-parse', '--verify', '-q', `refs/promptlog/sessions/${id}`], { cwd }) ?? ''}`;
+        render = (g) => {
+          const p = renderGlanceParts(sessionCtx(m.session, f.features), [m.session], g, m.diff ?? '', { glanceFeature: f.features.glance, headlineInBox: false, leftovers: m.glance?.leftovers });
+          return { glance: toHtml(p.glance), files: toHtml(p.files), headline: g.headline };
+        };
+      } else {
+        const { base, head } = reviewRange(url);
+        const review = loadReview(base, head);
+        const m = buildReviewModel(cwd, base, head, { features: f.features, review });
+        input = { items: review.slices.map((sl) => ({ sessionId: sl.sessionId, turns: review.sessions[sl.sessionId]!.turns.filter((t) => t.index >= sl.fromTurn && t.index <= sl.toTurn) })), diff: m.diff };
+        key = `r:${review.mergeBase}..${gitMaybe(['rev-parse', head], { cwd }) ?? head}:${review.slices.map((sl) => `${sl.sessionId}@${gitMaybe(['rev-parse', '--verify', '-q', `refs/promptlog/sessions/${sl.sessionId}`], { cwd }) ?? ''}`).join(',')}`;
+        render = (g) => {
+          const ctx = reviewCtx(m, parseDiff(m.diff).map((d) => d.newPath));
+          const p = renderGlanceParts(ctx, Object.values(review.sessions), g, m.diff, { glanceFeature: f.features.glance, leftovers: m.glance?.leftovers });
+          return { glance: toHtml(p.glance), files: toHtml(p.files) };
+        };
+      }
+      let p = glances.get(key) as Promise<Awaited<ReturnType<QuickModule['buildGlance']>>> | undefined;
+      if (!p) {
+        p = q.buildGlance(cwd, input, { gemini: q.repoGeminiClient(cwd) });
+        glances.set(key, p);
+        p.catch(() => glances.delete(key));
+      }
+      try {
+        return sendJson(res, 200, { ok: true, ...render(await p) });
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    if (path === '/api/quick-ask') {
+      if (method !== 'POST') throw new HttpError(405, 'use POST');
+      if (!allowedOrigin(req)) throw new HttpError(403, 'cross-origin request refused');
+      if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) throw new HttpError(415, 'expected application/json');
+      let body: Record<string, unknown>;
+      try {
+        body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+      } catch (e) {
+        if (e instanceof HttpError) throw e;
+        throw new HttpError(400, 'invalid JSON body');
+      }
+      const question = typeof body.question === 'string' ? body.question.trim() : '';
+      if (!question || question.length > 4000) throw new HttpError(400, 'question must be 1-4000 characters');
+      const target = typeof body.target === 'string' ? body.target : '';
+      const range = /^([^.]+(?:\.[^.]+)*)\.\.([^.]+(?:\.[^.]+)*)$/.exec(target);
+      if (!(range ? isSafeRev(range[1]!) && isSafeRev(range[2]!) : isSafeSessionId(target))) throw new HttpError(400, 'invalid target');
+      const f = await features();
+      if (!f.quick.ok || !f.features.quick?.available) return sendJson(res, 501, { ok: false, unavailable: true, error: f.features.quick?.available === false ? f.features.quick.reason : 'unavailable' });
+      try {
+        const result = await f.quick.mod.quickAsk({ cwd, question, target: range ? target : sessionParam(target) });
+        return sendJson(res, 200, { ok: true, html: toHtml(renderQuickAskResult(result)) });
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) });
       }
     }
 

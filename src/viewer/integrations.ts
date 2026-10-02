@@ -4,6 +4,8 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { AskResult, Review, ReviewSummary } from '../core/types.ts';
+import type { Gemini } from '../quick/gemini.ts';
+import type { Glance, GlanceInput } from '../quick/glance.ts';
 
 export interface AskModule {
   ask(opts: { cwd: string; sessionId: string; turn: number; question: string; model?: string }): Promise<AskResult>;
@@ -34,4 +36,17 @@ export function loadAsk(): Promise<Loaded<AskModule>> {
 
 export function loadSummarize(): Promise<Loaded<SummarizeModule>> {
   return load<SummarizeModule>('../summarize/index.ts', 'summarizeReview', 'The summarizer (src/summarize)');
+}
+
+/** src/quick: the Gemini-written glance and quick asks (Jev + Gemini). */
+export interface QuickModule {
+  /** Which parts have keys: the glance needs Gemini; quick asks need Gemini and a decision endpoint. Throws when missing. */
+  repoGeminiClient(cwd: string): Gemini;
+  decisionClient(cwd: string): unknown;
+  buildGlance(cwd: string, input: GlanceInput, opts: { gemini: Gemini }): Promise<Glance>;
+  quickAsk(opts: { cwd: string; question: string; target?: string }): Promise<AskResult>;
+}
+
+export function loadQuick(): Promise<Loaded<QuickModule>> {
+  return load<QuickModule>('../quick/index.ts', 'quickAsk', 'Quick asks (src/quick)');
 }

@@ -3,8 +3,28 @@ import { basename } from 'node:path';
 import { gitBuf, gitMaybe, repoRoot } from '../core/git.ts';
 import { assembleReview } from '../core/review.ts';
 import { diffTrees, listSessions, loadSession, readStoredSession } from '../core/store.ts';
-import type { AskResult, Review, Session } from '../core/types.ts';
+import { isCommandPrompt } from '../core/transcript.ts';
+import type { AskResult, Review, Session, Turn } from '../core/types.ts';
+import { basicGlance } from '../quick/glance.ts';
+import { findLeftovers } from '../quick/leftovers.ts';
+import { sessionCode } from '../quick/scope.ts';
 import { turnKey, type BranchRow, type ExtrasMap, type Features, type IndexPageModel, type ReviewPageModel, type SessionPageModel, type SessionRow } from './types.ts';
+
+/** Quick asks (whole-page, Jev + Gemini) carry a `quick` block; deep asks at a turn don't. */
+export const isQuickAsk = (a: AskResult) => (a as { quick?: unknown }).quick !== undefined;
+
+/** A stored title that is really a terminal or slash command (`!ls`) isn't a title. */
+export const displayTitle = (t: string | undefined) => (t && !isCommandPrompt(t) ? t : undefined);
+
+/** Quick asks on any of these turns, newest first. */
+export function quickAsksFor(asks: Map<string, AskResult[]> | undefined, items: { sessionId: string; turns: Turn[] }[]): AskResult[] {
+  const out: AskResult[] = [];
+  for (const { sessionId, turns } of items) {
+    const idx = new Set(turns.map((t) => t.index));
+    for (const a of asks?.get(sessionId) ?? []) if (isQuickAsk(a) && idx.has(a.turn)) out.push(a);
+  }
+  return out.sort((a, b) => (a.askedAt < b.askedAt ? 1 : -1));
+}
 
 /** Diffs bigger than this are cut (on a line boundary) before rendering. */
 export const MAX_DIFF_BYTES = 4 * 1024 * 1024;
@@ -91,7 +111,7 @@ export function computeExtras(
           // Snapshot trees not available locally (e.g. partially fetched); skip the marker.
         }
       }
-      const turnAsks = asks.filter((a) => a.turn === t.index);
+      const turnAsks = asks.filter((a) => a.turn === t.index && !isQuickAsk(a));
       if (turnAsks.length) e.asks = turnAsks;
       if (Object.keys(e).length) extras[turnKey(sid, t.index)] = e;
     }
@@ -108,14 +128,32 @@ export function buildReviewModel(cwd: string, base: string, head: string, opts: 
     { subjects, asks: opts.asks },
   );
   const diff = gitDiff(cwd, review.mergeBase, head);
-  return { review, extras, diff: diff.text, diffTruncated: diff.truncated, features: opts.features, repoName: repoName(cwd) };
+  const items = review.slices.map((sl) => ({ sessionId: sl.sessionId, turns: review.sessions[sl.sessionId]!.turns.filter((t) => t.index >= sl.fromTurn && t.index <= sl.toTurn) }));
+  const headSha = gitMaybe(['rev-parse', '--verify', '-q', `${head}^{commit}`], { cwd }) ?? undefined;
+  const glance = { glance: basicGlance({ items, diff: diff.text }), target: `${base}..${head}`, asks: quickAsksFor(opts.asks, items), leftovers: findLeftovers(cwd, diff.text, headSha) };
+  return { review, extras, diff: diff.text, diffTruncated: diff.truncated, features: opts.features, repoName: repoName(cwd), glance };
+}
+
+/** What a session changed overall: its first before-snapshot to its last after-snapshot. */
+export function sessionDiff(cwd: string, session: Session): { text: string; truncated: boolean } {
+  const from = session.turns.find((t) => t.meta?.stateBefore)?.meta?.stateBefore;
+  const to = [...session.turns].reverse().find((t) => t.meta?.stateAfter)?.meta?.stateAfter;
+  return from && to && from !== to ? gitDiff(cwd, from, to) : { text: '', truncated: false };
 }
 
 export function buildSessionModel(cwd: string, sessionId: string, opts: { features: Features; asks?: Map<string, AskResult[]> }): SessionPageModel | null {
   const session = loadSession(cwd, sessionId);
   if (!session) return null;
   const extras = computeExtras(cwd, [{ session, from: 1, to: Number.MAX_SAFE_INTEGER }], { asks: opts.asks });
-  return { session, extras, features: opts.features, repoName: repoName(cwd) };
+  const diff = sessionDiff(cwd, session);
+  const items = [{ sessionId, turns: session.turns }];
+  const glance = {
+    glance: basicGlance({ items, diff: diff.text, title: displayTitle(session.meta.title) }),
+    target: sessionId,
+    asks: quickAsksFor(opts.asks, items),
+    leftovers: findLeftovers(cwd, diff.text, sessionCode(cwd, session.turns)?.rev),
+  };
+  return { session, extras, features: opts.features, repoName: repoName(cwd), diff: diff.text, diffTruncated: diff.truncated, glance };
 }
 
 /** Resolve a full session id from an exact id or a unique prefix. */
@@ -135,7 +173,7 @@ export function buildIndexModel(cwd: string): IndexPageModel {
     if (!s) continue;
     rows.push({
       sessionId,
-      title: s.meta.title,
+      title: displayTitle(s.meta.title),
       branch: s.meta.branch,
       author: s.meta.author?.name,
       turns: s.turns.length,
@@ -146,7 +184,7 @@ export function buildIndexModel(cwd: string): IndexPageModel {
     const branches = new Set([s.meta.branch, ...s.turns.map((t) => t.meta.branch)].filter((b): b is string => !!b && b !== 'HEAD'));
     for (const b of branches) {
       const e = byBranch.get(b) ?? { sessions: [] };
-      e.sessions.push({ sessionId, title: s.meta.title });
+      e.sessions.push({ sessionId, title: displayTitle(s.meta.title) });
       if (!e.updatedAt || (s.meta.updatedAt && s.meta.updatedAt > e.updatedAt)) e.updatedAt = s.meta.updatedAt;
       byBranch.set(b, e);
     }
