@@ -158,7 +158,10 @@ export function builtinRules(): RedactRule[] {
     { kind: 'anthropic-key', re: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
     { kind: 'openai-key', re: /\bsk-(?!ant-)(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}/g, accept: hasLetterAndDigit },
     { kind: 'google-api-key', re: /\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g },
+    // Newer Google / Gemini API keys: "AQ." + a long URL-safe token.
+    { kind: 'google-api-key', re: /\bAQ\.[0-9A-Za-z_-]{40,}/g, accept: hasLetterAndDigit },
     { kind: 'npm-token', re: /\bnpm_[A-Za-z0-9]{36}\b/g },
+    { kind: 'dopp-key', re: /\bus_[0-9a-f]{40}\b/g },
     { kind: 'jwt', re: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g },
     {
       kind: 'bearer-token',

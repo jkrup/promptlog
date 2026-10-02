@@ -20,6 +20,8 @@ const SECRETS: [string, string, string][] = [
   ['openai-key', j('sk-', 'abcdefghijklmnopqrstuvwxyz0123456789ABCD'), ''],
   ['jwt', j('eyJhbGciOiJIUzI1NiJ9', '.eyJzdWIiOiIxMjM0NTY3ODkwIn0', '.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'), ''],
   ['google-api-key', j('AIza', 'SyA1234567890abcdefghijklmnopqrstuv'), ''],
+  ['dopp-key', j('us_', '0123456789abcdef0123456789abcdef01234567'), ''],
+  ['google-api-key', j('AQ.', 'Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2Yz3_ab-cd4ef5'), ''],
 ];
 
 test('redactText: provider token formats', () => {
