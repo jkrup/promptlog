@@ -148,7 +148,7 @@ test('hooks: SessionEnd closes an interrupted turn and cleans up the temp index'
   assert.ok(!existsSync(join(localDir(repo), `index-${s.id}`)));
 });
 
-test('hooks: a session in a `pl fork` worktree records its parent', async () => {
+test('hooks: a session in a `promptlog fork` worktree records its parent', async () => {
   const readForkMarker = await loadForkMarkerReader();
   assert.ok(readForkMarker, 'src/ask exports readForkMarker');
   const repo = tempRepo();
@@ -191,7 +191,7 @@ test('hooks: nothing happens outside a git repo', () => {
   assert.ok(!existsSync(join(dir, '.git')));
 });
 
-test('bin/pl hook: reads JSON on stdin, exits 0, logs errors instead of failing', () => {
+test('bin/promptlog hook: reads JSON on stdin, exits 0, logs errors instead of failing', () => {
   const repo = tempRepo();
   const dir = tmp();
   const s = new Session(repo, dir);

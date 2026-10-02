@@ -13,7 +13,7 @@ export function hooksConfig(plBin: string) {
   return hooks;
 }
 
-const USAGE = `usage: pl install [--user] [--auto-push] [--no-git-hooks]
+const USAGE = `usage: promptlog install [--user] [--auto-push] [--no-git-hooks]
   --user          install Claude Code hooks in ~/.claude/settings.json instead of this repo's .claude/settings.local.json
   --auto-push     also push refs/promptlog/* whenever you git push (pre-push hook)
   --no-git-hooks  skip the git hooks (commit trailers)
@@ -24,7 +24,7 @@ export async function run(args: string[]): Promise<number> {
     process.stdout.write(USAGE);
     return 0;
   }
-  const plBin = fileURLToPath(new URL('../../../bin/pl', import.meta.url));
+  const plBin = fileURLToPath(new URL('../../../bin/promptlog', import.meta.url));
   const user = args.includes('--user');
   const root = repoRoot(process.cwd());
   let target: string;
@@ -40,7 +40,7 @@ export async function run(args: string[]): Promise<number> {
   settings.hooks ??= {};
   for (const [ev, entries] of Object.entries(hooksConfig(plBin))) {
     const existing = (settings.hooks[ev] ?? []) as { hooks?: { command?: string }[] }[];
-    const kept = existing.filter((e) => !e.hooks?.some((h) => h.command?.includes(' hook ' + ev) && h.command.includes('/bin/pl')));
+    const kept = existing.filter((e) => !e.hooks?.some((h) => h.command?.includes(' hook ' + ev) && /\/bin\/(pl|promptlog) hook /.test(h.command)));
     settings.hooks[ev] = [...kept, ...entries];
   }
   mkdirSync(dirname(target), { recursive: true });

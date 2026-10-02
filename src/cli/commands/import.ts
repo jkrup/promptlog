@@ -9,7 +9,7 @@ import type { CaptureState } from '../../capture/state.ts';
 export async function run(args: string[]): Promise<number> {
   const file = args.find((a, i) => !a.startsWith('-') && args[i - 1] !== '--session');
   if (!file) {
-    process.stderr.write('usage: pl import <transcript.jsonl> [--session <id>]\n');
+    process.stderr.write('usage: promptlog import <transcript.jsonl> [--session <id>]\n');
     return 1;
   }
   const root = repoRoot(process.cwd());

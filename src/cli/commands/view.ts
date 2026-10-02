@@ -1,11 +1,11 @@
-// pl view [<base>..<head> | <branch>] [--port 4777]: serve the review viewer on 127.0.0.1.
+// promptlog view [<base>..<head> | <branch>] [--port 4777]: serve the review viewer on 127.0.0.1.
 import { repoRoot } from '../../core/git.ts';
 import { parseRange } from '../../core/review.ts';
 import { isSafeRev } from '../../viewer/model.ts';
 import { reviewUrl } from '../../viewer/render.ts';
 import { startServer } from '../../viewer/server.ts';
 
-const USAGE = `usage: pl view [<base>..<head> | <branch>] [--port <n>]
+const USAGE = `usage: promptlog view [<base>..<head> | <branch>] [--port <n>]
 
 Serves the review viewer on http://127.0.0.1 (never on other interfaces).
 With a range or branch, prints the review URL; without, the index of branches and sessions.
@@ -39,14 +39,14 @@ export async function run(args: string[]): Promise<number> {
 
   const root = repoRoot(process.cwd());
   if (!root) {
-    process.stderr.write('pl view: not inside a git repository\n');
+    process.stderr.write('promptlog view: not inside a git repository\n');
     return 1;
   }
   let path = '/';
   if (spec) {
     const { base, head } = parseRange(root, spec);
     if (!isSafeRev(base) || !isSafeRev(head)) {
-      process.stderr.write(`pl view: invalid range: ${spec}\n`);
+      process.stderr.write(`promptlog view: invalid range: ${spec}\n`);
       return 1;
     }
     path = reviewUrl(base, head);

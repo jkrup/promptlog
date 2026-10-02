@@ -6,14 +6,14 @@ import { randomUUID } from 'node:crypto';
 import { handleHook, type HookOptions, type HookPayload } from '../src/capture/hook.ts';
 import { ROOT } from './helpers.ts';
 
-export const PL = join(ROOT, 'bin/pl');
+export const PL = join(ROOT, 'bin/promptlog');
 
 export function sh(cwd: string, cmd: string, args: string[], input?: string): string {
   return execFileSync(cmd, args, { cwd, input, stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf8' }).replace(/\n$/, '');
 }
 export const gitc = (cwd: string, ...args: string[]) => sh(cwd, 'git', args);
 
-/** Run `bin/pl` with stdin; returns status and output. */
+/** Run `bin/promptlog` with stdin; returns status and output. */
 export function pl(cwd: string, args: string[], input = '', env: Record<string, string> = {}) {
   const r = spawnSync(PL, args, { cwd, input, encoding: 'utf8', env: { ...process.env, ...env } });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };

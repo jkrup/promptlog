@@ -29,10 +29,10 @@ git checkout -qb feature/rates
 
 cat > "$WORK/settings.json" <<J
 { "hooks": {
-  "SessionStart": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/pl hook SessionStart"}]}],
-  "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/pl hook UserPromptSubmit"}]}],
-  "Stop": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/pl hook Stop"}]}],
-  "SessionEnd": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/pl hook SessionEnd"}]}]
+  "SessionStart": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/promptlog hook SessionStart"}]}],
+  "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/promptlog hook UserPromptSubmit"}]}],
+  "Stop": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/promptlog hook Stop"}]}],
+  "SessionEnd": [{"hooks": [{"type": "command", "command": "$PL_ROOT/bin/promptlog hook SessionEnd"}]}]
 } }
 J
 # When generated from inside another Claude Code session, drop the parent's session identity so nested runs

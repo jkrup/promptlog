@@ -1,5 +1,5 @@
 // Commit trailers: `Promptlog: <sessionId>#<turn>` on commits made while sessions in this worktree have uncommitted turns.
-// Driven by git hooks installed by `pl install` (see githooks.ts):
+// Driven by git hooks installed by `promptlog install` (see githooks.ts):
 //   prepare-commit-msg -> addTrailers      append one trailer per session (idempotent, so amend doesn't duplicate)
 //   commit-msg         -> stripIfOnlyTrailers  let git abort an otherwise empty message
 //   post-commit        -> clearAfterCommit     reset turnsSinceCommit

@@ -6,26 +6,29 @@ Prompt-native code review. GitHub made the code diff the thing you review. When 
 
 ```sh
 git clone promptlog.bundle ~/Projects/promptlog && cd ~/Projects/promptlog && npm install
-ln -s "$PWD/bin/pl" /usr/local/bin/pl      # or add bin/ to PATH
+mkdir -p ~/.local/bin && ln -s "$PWD/bin/promptlog" ~/.local/bin/promptlog   # no sudo; ~/.local/bin must be on PATH
 
 cd ~/code/your-repo
-pl install                 # Claude Code hooks (.claude/settings.local.json) + git commit-trailer hooks
+promptlog install                   # Claude Code hooks (.claude/settings.local.json) + git commit-trailer hooks
 # ...use Claude Code as usual, commit as usual...
-pl ls                      # captured sessions
-pl review main..my-branch  # the conversations behind a branch (text)
-pl view main..my-branch    # the review UI in your browser
-pl summarize main..my-branch
-pl ask <session> --at 2 "does this still hardcode USD?"
-pl fork <session> --at 2 --exec   # continue from turn 2 in a new worktree
-pl push / pl fetch         # share refs/promptlog/* with your remote
+promptlog ls                        # captured sessions
+promptlog review main..my-branch    # the conversations behind a branch (text)
+promptlog view main..my-branch      # the review UI in your browser
+promptlog summarize main..my-branch
+promptlog ask main..my-branch "did it handle retries?"   # quick answer from the whole PR (Jev + Gemini Flash keys)
+promptlog ask <session> --at 2 "does this still hardcode USD?"
+promptlog fork <session> --at 2 --exec   # continue from turn 2 in a new worktree
+promptlog push / promptlog fetch    # share refs/promptlog/* with your remote
 ```
+
+The CLI used to be `pl`. It was renamed because macOS already ships `/usr/bin/pl`.
 
 Try it on the demo without installing anything:
 
 ```sh
 git clone -q fixtures/demo.bundle /tmp/demo && cd /tmp/demo \
   && git fetch -q origin '+refs/promptlog/*:refs/promptlog/*' && git checkout -q feature/rates \
-  && git branch -f main origin/main && ~/Projects/promptlog/bin/pl view main..feature/rates
+  && git branch -f main origin/main && ~/Projects/promptlog/bin/promptlog view main..feature/rates
 ```
 
 ## How it works

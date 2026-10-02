@@ -13,7 +13,7 @@ git push origin 'refs/promptlog/*:refs/promptlog/*'
 git fetch origin '+refs/promptlog/*:refs/promptlog/*'
 ```
 
-`pl push [remote]` / `pl fetch [remote]` run these. `pl fetch` puts back any local ref the forced fetch would rewind (a session with unpushed turns).
+`promptlog push [remote]` / `promptlog fetch [remote]` run these. `promptlog fetch` puts back any local ref the forced fetch would rewind (a session with unpushed turns).
 
 ## Tree of each session commit
 
@@ -37,14 +37,14 @@ turns/000001/subagents/*.jsonl optional subagent transcripts (agent-<id>.jsonl, 
 ## Linking conversations to code (many-to-many)
 
 - `TurnMeta.commits` lists the commits created during that turn (`headBefore..headAfter`).
-- Commits made while a session is active get a trailer `Promptlog: <sessionId>#<turn>` (one line per session, the latest turn since the last commit, or the turn in progress). `pl install` adds `prepare-commit-msg`/`commit-msg`/`post-commit` git hooks for this (and `pre-push` with `--auto-push`), chaining to existing hooks kept as `<name>.pre-promptlog`. This covers commits the human makes by hand after a turn, and it survives squash merges because git carries trailers into squash messages.
+- Commits made while a session is active get a trailer `Promptlog: <sessionId>#<turn>` (one line per session, the latest turn since the last commit, or the turn in progress). `promptlog install` adds `prepare-commit-msg`/`commit-msg`/`post-commit` git hooks for this (and `pre-push` with `--auto-push`), chaining to existing hooks kept as `<name>.pre-promptlog`. This covers commits the human makes by hand after a turn, and it survives squash merges because git carries trailers into squash messages.
 - A **review** (the "PR") is a commit range `base..head`. `assembleReview` (`src/core/review.ts`) picks every session with a turn linked to a commit in the range, then slices that session. The slice runs from just after its last turn that committed *outside* the range, through its last in-range committing turn, and on through the trailing discussion. So:
   - several sessions → one review: several slices, ordered by time;
   - one session → several reviews: each review gets its own slice.
 
 ## Asks (`refs/promptlog/asks/<sessionId>`)
 
-Reviewers' questions put to a session at a turn (`pl ask`), with their answers. See `docs/ask-fork.md`.
+Reviewers' questions put to a session at a turn (`promptlog ask`), with their answers. See `docs/ask-fork.md`.
 
 - There's one ref per session, separate from `refs/promptlog/sessions/*` because capture rebuilds session trees and would drop anything else. The same refspec pushes and fetches it.
 - It's an append-only commit chain. Each commit adds one file and has the message `ask turn <N>: <first line of question>`.
@@ -57,6 +57,7 @@ Reviewers' questions put to a session at a turn (`pl ask`), with their answers. 
   "state": { "source": "after", "commit": "<checked-out commit>", "tree": "<snapshot tree>" } }
 ```
 
+- Quick asks (`promptlog ask` without `--at`, `docs/quick-ask.md`) have no `state` or `forkSessionId`. They add `quick`: `{ target, verdict?, used, scores, usage, models }` (`QuickAskInfo` in `src/quick/types.ts`), and `turn` is the deciding or most relevant turn.
 - `state.source` says which snapshot answered: `after` (turn N's after tree), `next-before` (turn N+1's before tree) or `head-after` (HEAD commit at the end of turn N, when no snapshot exists).
 - Writers compare-and-swap the ref (`update-ref <ref> <new> <old>`) and retry. Since file names are unique, two diverged chains merge as the union of their files.
 
@@ -67,7 +68,9 @@ Reviewers' questions put to a session at a turn (`pl ask`), with their answers. 
 - `sessions/<id>.lock`: held while a hook updates that session
 - `index-<id>`: temp index used for snapshots
 - `errors.log`: hook failures. Hooks never block the agent.
-- `fork.json` + `fork-<sessionId>-t<N>.jsonl`: only in worktrees created by `pl fork`. Parent `{sessionId, turn}` for capture to record as `SessionMeta.parent`, plus the resumable transcript (see `docs/ask-fork.md`).
+- `fork.json` + `fork-<sessionId>-t<N>.jsonl`: only in worktrees created by `promptlog fork`. Parent `{sessionId, turn}` for capture to record as `SessionMeta.parent`, plus the resumable transcript (see `docs/ask-fork.md`).
 - `resume-<sessionId>-t<N>.jsonl`: transcript for an ask's temporary worktree (removed with it).
+- `cache/summary-<hash>.json`: cached review summaries (`src/summarize/cache.ts`).
+- `cache/map-<sessionId>.json`: quick-ask map, one Gemini note per turn keyed by a hash of the turn (`src/quick/map.ts`, `docs/quick-ask.md`). Not pushed.
 
-`<git-common-dir>/promptlog/worktrees/`: temporary worktrees for `pl ask` (removed after answering unless `--keep`).
+`<git-common-dir>/promptlog/worktrees/`: temporary worktrees for `promptlog ask` (removed after answering unless `--keep`).

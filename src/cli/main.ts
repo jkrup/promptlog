@@ -1,10 +1,10 @@
-// `pl` entry point. Each subcommand lives in ./commands/<name>.ts and exports `run(args): Promise<number | void>`.
+// `promptlog` entry point. Each subcommand lives in ./commands/<name>.ts and exports `run(args): Promise<number | void>`.
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const HELP = `pl: prompt-native code review
+const HELP = `promptlog: prompt-native code review
 
-Usage: pl <command> [args]
+Usage: promptlog <command> [args]
 
 Capture
   install [--user] [--auto-push]  Install Claude Code hooks (repo-local .claude/settings.local.json by default)

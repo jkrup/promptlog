@@ -38,7 +38,7 @@ export function forkMarkerPath(worktreeGitDir: string): string {
   return join(worktreeGitDir, 'promptlog', FORK_MARKER_FILE);
 }
 
-/** The fork marker for the worktree containing `cwd`, if it was created by `pl fork`. */
+/** The fork marker for the worktree containing `cwd`, if it was created by `promptlog fork`. */
 export function readForkMarker(cwd: string): ForkMarker | null {
   const dir = gitMaybe(['rev-parse', '--absolute-git-dir'], { cwd });
   if (!dir) return null;

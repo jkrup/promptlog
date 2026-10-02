@@ -1,11 +1,11 @@
 # Ask and fork: resuming a conversation at turn N
 
-`pl ask` and `pl fork` load a captured session **as of turn N**: the transcript up to and including turn N, and the repo exactly as it was at the end of turn N. Code: `src/ask/`. Storage for asks: `docs/format.md` ("Asks").
+`promptlog ask` and `promptlog fork` load a captured session **as of turn N**: the transcript up to and including turn N, and the repo exactly as it was at the end of turn N. Code: `src/ask/`. Storage for asks: `docs/format.md` ("Asks"). For a cheap answer from the whole conversation without a worktree, `promptlog ask` without `--at` uses Jev + Gemini Flash instead: see `docs/quick-ask.md`.
 
 ```
-pl ask  <session> --at <turn> [--model m] [--keep] [--no-save] [--json] "question"
-pl asks <session> [--at <turn>] [--json]
-pl fork <session> --at <turn> [--branch name] [--dir path] [--model m] [--exec]
+promptlog ask  <session> --at <turn> [--model m] [--keep] [--no-save] [--json] "question"
+promptlog asks <session> [--at <turn>] [--json]
+promptlog fork <session> --at <turn> [--branch name] [--dir path] [--model m] [--exec]
 ```
 
 API (`src/ask/index.ts`): `ask()`, `listAsks()`, `materialize()`, `fork()`, `execFork()`, `readForkMarker()`.
@@ -32,7 +32,7 @@ That's all. Claude Code copies the lines into a **new** session under `~/.claude
 | Must `cwd` fields be rewritten? | Not for resume to work: it succeeds even when the original cwd doesn't exist. We rewrite anyway, see below. |
 | Dangling `tool_use` at the end? | Claude Code tolerates it and treats the call as interrupted. We drop it anyway so the history ends cleanly and the snapshot is the only source of truth. |
 | `queue-operation` lines? | The store files the *next* prompt's `enqueue` line under the previous turn, so a turn-N transcript contains turn N+1's prompt text. They're not replayed as messages, but we drop them so the future prompt can't leak. |
-| Resume by id later? | `claude --resume <forkSessionId>` finds the session from any directory. Its worktree is gone unless `pl ask --keep`. |
+| Resume by id later? | `claude --resume <forkSessionId>` finds the session from any directory. Its worktree is gone unless `promptlog ask --keep`. |
 
 **Why rewrite paths.** Tool inputs and results in the transcript carry absolute paths such as `/home/dana/repo/src/server.js`. On the author's own machine that path exists, but it holds the *current* state, not turn N's. A resumed model that reuses a path from history would read the wrong state, and a forked session would **edit the author's real checkout**. Rewriting the root (whole path prefixes only) makes every path in history point at the worktree.
 
@@ -57,7 +57,7 @@ The process is spawned asynchronously (`runClaudeJsonAsync` in `src/ask/run.ts`)
 
 ## fork
 
-`pl fork` does the following:
+`promptlog fork` does the following:
 - materializes turn N into a new worktree on branch `promptlog/fork-<sid8>-t<N>`, running checkout hooks as usual;
 - writes the transcript to `<worktree-git-dir>/promptlog/fork-<sessionId>-t<N>.jsonl`;
 - writes the marker below;

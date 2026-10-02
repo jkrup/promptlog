@@ -23,7 +23,7 @@ export async function run(args: string[]): Promise<number> {
   const cwd = process.cwd();
   const id = args[0] && resolveSessionId(cwd, args[0]);
   if (!id) {
-    process.stderr.write('usage: pl show <session-id-prefix> [--raw]\n');
+    process.stderr.write('usage: promptlog show <session-id-prefix> [--raw]\n');
     return 1;
   }
   if (args.includes('--raw')) {

@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 
 /**
- * Env vars that tie a process to its *parent* Claude Code session. If `pl` itself runs inside Claude Code
+ * Env vars that tie a process to its *parent* Claude Code session. If `promptlog` itself runs inside Claude Code
  * (e.g. from its Bash tool) and we spawn `claude`, these would make the child reuse the parent's session id
  * and stream into the parent session. Always strip them for child runs.
  */

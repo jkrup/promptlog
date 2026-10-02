@@ -1,8 +1,8 @@
 import { repoRoot } from '../../core/git.ts';
 import { defaultRemote, pushRefs } from '../../capture/sync.ts';
 
-// pl push [remote]            push refs/promptlog/* (default: the current branch's remote, else origin)
-// pl push <remote> --from-hook  used by the pre-push hook: quiet, --no-verify, never fails the user's push
+// promptlog push [remote]            push refs/promptlog/* (default: the current branch's remote, else origin)
+// promptlog push <remote> --from-hook  used by the pre-push hook: quiet, --no-verify, never fails the user's push
 export async function run(args: string[]): Promise<number> {
   const fromHook = args.includes('--from-hook');
   const root = repoRoot(process.cwd());
@@ -12,7 +12,7 @@ export async function run(args: string[]): Promise<number> {
   }
   const remote = args.find((a) => !a.startsWith('-')) ?? defaultRemote(root);
   if (!remote) {
-    process.stderr.write('no remote to push to (pass one: pl push <remote>)\n');
+    process.stderr.write('no remote to push to (pass one: promptlog push <remote>)\n');
     return fromHook ? 0 : 1;
   }
   try {

@@ -1,4 +1,4 @@
-// Tiny argv parser shared by `pl ask|asks|fork`. `--name value`, `--name=value`, boolean `--flag`, positionals.
+// Tiny argv parser shared by `promptlog ask|asks|fork`. `--name value`, `--name=value`, boolean `--flag`, positionals.
 export interface ParsedArgs {
   positional: string[];
   options: Record<string, string>;

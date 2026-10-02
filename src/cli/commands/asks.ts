@@ -1,8 +1,8 @@
-// pl asks <session> [--at <turn>] [--json]: past Q&A on a session (refs/promptlog/asks/<id>).
+// promptlog asks <session> [--at <turn>] [--json]: past Q&A on a session (refs/promptlog/asks/<id>).
 import { listAsks, resolveSessionId } from '../../ask/index.ts';
 import { parseArgs, parseTurn } from '../../ask/cli.ts';
 
-const USAGE = 'usage: pl asks <session-prefix> [--at <turn>] [--json]\n';
+const USAGE = 'usage: promptlog asks <session-prefix> [--at <turn>] [--json]\n';
 
 export async function run(args: string[]): Promise<number> {
   let p;
@@ -25,7 +25,7 @@ export async function run(args: string[]): Promise<number> {
     return 0;
   }
   if (asks.length === 0) {
-    process.stdout.write(`no asks on ${sessionId.slice(0, 8)} yet (try \`pl ask ${sessionId.slice(0, 8)} --at <turn> "question"\`)\n`);
+    process.stdout.write(`no asks on ${sessionId.slice(0, 8)} yet (try \`promptlog ask ${sessionId.slice(0, 8)} --at <turn> "question"\`)\n`);
     return 0;
   }
   for (const a of asks) {

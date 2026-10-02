@@ -1,7 +1,7 @@
 import { repoRoot } from '../../core/git.ts';
 import { defaultRemote, fetchRefs } from '../../capture/sync.ts';
 
-// pl fetch [remote]   fetch refs/promptlog/* (default: the current branch's remote, else origin)
+// promptlog fetch [remote]   fetch refs/promptlog/* (default: the current branch's remote, else origin)
 export async function run(args: string[]): Promise<number> {
   const root = repoRoot(process.cwd());
   if (!root) {
@@ -10,7 +10,7 @@ export async function run(args: string[]): Promise<number> {
   }
   const remote = args.find((a) => !a.startsWith('-')) ?? defaultRemote(root);
   if (!remote) {
-    process.stderr.write('no remote to fetch from (pass one: pl fetch <remote>)\n');
+    process.stderr.write('no remote to fetch from (pass one: promptlog fetch <remote>)\n');
     return 1;
   }
   const res = fetchRefs(root, remote);

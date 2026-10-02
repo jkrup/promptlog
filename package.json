@@ -8,12 +8,12 @@
     "node": ">=22.18"
   },
   "bin": {
-    "pl": "bin/pl"
+    "promptlog": "bin/promptlog"
   },
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "node --no-warnings --test 'test/**/*.test.ts' 'src/**/*.test.ts'",
-    "pl": "node --no-warnings src/cli/main.ts",
+    "promptlog": "node --no-warnings src/cli/main.ts",
     "eval": "node --no-warnings src/summarize/eval.ts"
   },
   "devDependencies": {

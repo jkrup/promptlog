@@ -31,7 +31,7 @@ function sessionWithTurns(repo: string, n: number): Session {
   return s;
 }
 
-test('pl install: Claude Code hooks include SubagentStop; git hooks installed and chained', () => {
+test('promptlog install: Claude Code hooks include SubagentStop; git hooks installed and chained', () => {
   const repo = tempRepo();
   const hooks = join(repo, '.git', 'hooks');
   mkdirSync(hooks, { recursive: true });
@@ -159,7 +159,7 @@ test('trailer: worktrees share hooks but keep their own sessions; core.hooksPath
   assert.ok(existsSync(join(other, '.githooks', 'post-commit')));
 });
 
-test('hookScript: quotes the pl path', () => {
-  const s = hookScript('post-commit', "/opt/it's here/bin/pl");
-  assert.match(s, /PL='\/opt\/it'\\''s here\/bin\/pl'/);
+test('hookScript: quotes the promptlog path', () => {
+  const s = hookScript('post-commit', "/opt/it's here/bin/promptlog");
+  assert.match(s, /PL='\/opt\/it'\\''s here\/bin\/promptlog'/);
 });

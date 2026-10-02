@@ -2,10 +2,10 @@ import { repoRoot } from '../../core/git.ts';
 import { logHookError } from '../../capture/hook.ts';
 import { addTrailers, clearAfterCommit, stripIfOnlyTrailers } from '../../capture/trailer.ts';
 
-// Git hook entry points (installed by `pl install`). They never fail the commit.
-//   pl trailer <msg-file> [source] [sha]   prepare-commit-msg: add `Promptlog: <session>#<turn>` trailers
-//   pl trailer --commit-msg <msg-file>     commit-msg: drop our trailers if the message is otherwise empty
-//   pl trailer --post-commit               post-commit: reset turns-since-commit
+// Git hook entry points (installed by `promptlog install`). They never fail the commit.
+//   promptlog trailer <msg-file> [source] [sha]   prepare-commit-msg: add `Promptlog: <session>#<turn>` trailers
+//   promptlog trailer --commit-msg <msg-file>     commit-msg: drop our trailers if the message is otherwise empty
+//   promptlog trailer --post-commit               post-commit: reset turns-since-commit
 export async function run(args: string[]): Promise<number> {
   const cwd = process.cwd();
   const mode = args[0] === '--commit-msg' ? 'commit-msg' : args[0] === '--post-commit' ? 'post-commit' : 'prepare-commit-msg';

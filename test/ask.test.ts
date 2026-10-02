@@ -217,7 +217,7 @@ describe('asks ref', () => {
     assert.deepEqual(listAskedSessions(repo2), [sessionA]);
     assert.equal(g(repo2, 'rev-parse', sessionRef(sessionA)), sessionTip, 'session ref untouched');
 
-    // `pl asks` prints them.
+    // `promptlog asks` prints them.
     const out = execFileSync('node', ['--no-warnings', join(ROOT, 'src/cli/main.ts'), 'asks', sessionA.slice(0, 6)], { cwd: repo2, encoding: 'utf8' });
     assert.match(out, /── turn 1 · 2026-09-25 10:00[\s\S]*Q: first\?\nA: answer to first\?/);
   });

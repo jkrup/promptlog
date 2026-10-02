@@ -7,7 +7,7 @@ export async function run(_args: string[]): Promise<number> {
     .filter((s) => s !== null)
     .sort((a, b) => (a.meta.updatedAt < b.meta.updatedAt ? 1 : -1));
   if (rows.length === 0) {
-    process.stdout.write('no sessions captured yet (run `pl install`, then use Claude Code in this repo)\n');
+    process.stdout.write('no sessions captured yet (run `promptlog install`, then use Claude Code in this repo)\n');
     return 0;
   }
   for (const s of rows) {

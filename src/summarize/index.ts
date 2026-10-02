@@ -66,7 +66,7 @@ function keyFor(cwd: string, review: Review, model: string, budget: RenderBudget
   });
 }
 
-/** Everything short of calling the model: useful for `pl summarize --show-input` and tests. */
+/** Everything short of calling the model: useful for `promptlog summarize --show-input` and tests. */
 export function prepareSummary(cwd: string, review: Review, opts: SummarizeOptions = {}): PreparedSummary {
   const budget = { ...DEFAULT_BUDGET, ...opts.budget };
   const model = opts.model ?? DEFAULT_MODEL;

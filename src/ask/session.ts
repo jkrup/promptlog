@@ -9,7 +9,7 @@ export function resolveSessionId(cwd: string, idOrPrefix: string): string {
   if (all.includes(idOrPrefix)) return idOrPrefix;
   const matches = all.filter((id) => id.startsWith(idOrPrefix));
   if (matches.length === 1) return matches[0]!;
-  if (matches.length === 0) throw new Error(`no captured session matches "${idOrPrefix}" (see \`pl ls\`)`);
+  if (matches.length === 0) throw new Error(`no captured session matches "${idOrPrefix}" (see \`promptlog ls\`)`);
   throw new Error(`"${idOrPrefix}" is ambiguous: ${matches.map((m) => m.slice(0, 12)).join(', ')}`);
 }
 

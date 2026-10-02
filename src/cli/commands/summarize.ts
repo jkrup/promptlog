@@ -1,8 +1,8 @@
-// pl summarize [base..head] [--model m] [--refresh] [--json] [--show-input] [--budget tokens]
+// promptlog summarize [base..head] [--model m] [--refresh] [--json] [--show-input] [--budget tokens]
 import { assembleReview, parseRange } from '../../core/review.ts';
 import { DEFAULT_MODEL, prepareSummary, renderSummaryMarkdown, summarizeReviewDetailed } from '../../summarize/index.ts';
 
-const USAGE = `usage: pl summarize [<base>..<head>] [--model <m>] [--refresh] [--json] [--show-input] [--budget <tokens>]
+const USAGE = `usage: promptlog summarize [<base>..<head>] [--model <m>] [--refresh] [--json] [--show-input] [--budget <tokens>]
 
   Summarize the conversations behind a commit range for a reviewer: intent, pushbacks, open loops,
   plan-vs-diff and risk flags, each pointing at its turn. Cached in <git-dir>/promptlog/cache.

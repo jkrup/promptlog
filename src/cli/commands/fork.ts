@@ -1,8 +1,8 @@
-// pl fork <session> --at <turn> [--branch name] [--dir path] [--model m] [--exec]
+// promptlog fork <session> --at <turn> [--branch name] [--dir path] [--model m] [--exec]
 import { execFork, fork } from '../../ask/index.ts';
 import { parseArgs, parseTurn } from '../../ask/cli.ts';
 
-const USAGE = 'usage: pl fork <session-prefix> --at <turn> [--branch name] [--dir path] [--model m] [--exec]\n';
+const USAGE = 'usage: promptlog fork <session-prefix> --at <turn> [--branch name] [--dir path] [--model m] [--exec]\n';
 
 export async function run(args: string[]): Promise<number> {
   let p;

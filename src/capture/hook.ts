@@ -28,7 +28,7 @@ export interface HookPayload {
 export interface HookOptions {
   /** Snapshot size limit per file; default MAX_SNAPSHOT_FILE_BYTES. */
   maxFileBytes?: number;
-  /** Reads `pl fork`'s marker (src/ask); when given, captures in a fork worktree record SessionMeta.parent. */
+  /** Reads `promptlog fork`'s marker (src/ask); when given, captures in a fork worktree record SessionMeta.parent. */
   readForkMarker?: ForkMarkerReader;
 }
 

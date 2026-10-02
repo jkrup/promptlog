@@ -1,4 +1,4 @@
-// Link forked sessions to their parent. `pl fork` (src/ask) leaves a marker in the fork worktree's git dir; a session
+// Link forked sessions to their parent. `promptlog fork` (src/ask) leaves a marker in the fork worktree's git dir; a session
 // captured there whose transcript contains the parent's prompt uuid (`--fork-session` keeps message uuids) is the fork.
 // src/ask is loaded dynamically and optionally, so capture keeps working without it.
 import { existsSync, readFileSync } from 'node:fs';

@@ -51,7 +51,7 @@ test('perf: Stop capture on ~2,000 files and a 5 MB transcript', { skip: !enable
     writeFileSync(join(repo, `new${i}.txt`), 'new\n');
     warm.push(time(() => s.hook('Stop'))[1]);
   }
-  // End to end through bin/pl (process start + TS loading included).
+  // End to end through bin/promptlog (process start + TS loading included).
   pl(repo, ['hook', 'UserPromptSubmit'], JSON.stringify({ session_id: s.id, transcript_path: s.path, cwd: repo }));
   addTurn(50, 84);
   s.flush();

@@ -1,11 +1,11 @@
-// Git hooks installed by `pl install`: commit trailers, and optionally pushing refs/promptlog/* on `git push`.
+// Git hooks installed by `promptlog install`: commit trailers, and optionally pushing refs/promptlog/* on `git push`.
 // Existing hooks are never overwritten: they're moved to `<name>.pre-promptlog` and our script chains to them,
 // propagating their exit status where git honours it.
 import { chmodSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { git } from '../core/git.ts';
 
-export const HOOK_MARKER = '# promptlog: managed by `pl install`';
+export const HOOK_MARKER = '# promptlog: managed by `promptlog install`';
 export const BACKUP_SUFFIX = '.pre-promptlog';
 export const COMMIT_HOOKS = ['prepare-commit-msg', 'commit-msg', 'post-commit'] as const;
 export type GitHookName = (typeof COMMIT_HOOKS)[number] | 'pre-push';
@@ -59,7 +59,8 @@ function lexists(path: string): boolean {
 
 export function isOurHook(path: string): boolean {
   try {
-    return readFileSync(path, 'utf8').includes(HOOK_MARKER);
+    // Prefix match, so hooks installed under the old `pl` name still count as ours.
+    return readFileSync(path, 'utf8').includes('# promptlog: managed by');
   } catch {
     return false;
   }

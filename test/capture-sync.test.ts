@@ -27,7 +27,7 @@ function turn(s: Session, text: string) {
   s.hook('Stop');
 }
 
-test('pl push / pl fetch: share sessions through a remote', () => {
+test('promptlog push / promptlog fetch: share sessions through a remote', () => {
   const { remote, repo } = setup();
   assert.match(pl(repo, ['push']).stdout, /no sessions to push/);
   const s = new Session(repo, tmp());
@@ -51,7 +51,7 @@ test('pl push / pl fetch: share sessions through a remote', () => {
   assert.equal(ref(clone, s.id), ref(repo, s.id));
 });
 
-test('pl fetch: never rewinds local, unpushed captures', () => {
+test('promptlog fetch: never rewinds local, unpushed captures', () => {
   const { repo } = setup();
   const s = new Session(repo, tmp());
   turn(s, 'one');
@@ -65,7 +65,7 @@ test('pl fetch: never rewinds local, unpushed captures', () => {
   assert.match(pl(repo, ['fetch']).stdout, /kept .*unpushed turns/);
 });
 
-test('pl push failures: non-zero normally, zero from the hook', () => {
+test('promptlog push failures: non-zero normally, zero from the hook', () => {
   const repo = tempRepo();
   const s = new Session(repo, tmp());
   turn(s, 'one');
@@ -74,7 +74,7 @@ test('pl push failures: non-zero normally, zero from the hook', () => {
   assert.equal(pl(repo, ['push', join(tmp(), 'nope.git'), '--from-hook']).status, 0);
 });
 
-test('pl install --auto-push: git push also pushes session refs (no recursion)', () => {
+test('promptlog install --auto-push: git push also pushes session refs (no recursion)', () => {
   const { remote, repo } = setup();
   assert.equal(pl(repo, ['install', '--auto-push']).status, 0);
   const s = new Session(repo, tmp());
