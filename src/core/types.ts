@@ -164,3 +164,105 @@ export interface AskResult {
   askedBy?: string;
   costUsd?: number;
 }
+
+/** Jev's per-turn yes-probabilities for one quick-ask question (src/quick). */
+export interface TurnScore {
+  sessionId: string;
+  turn: number;
+  /** Does the turn address the subject of the question? */
+  relevant: number;
+  /** Does it hold information usable in a direct answer? */
+  evidence: number;
+  /** Does it show the thing asked about was done / handled? */
+  handled: number;
+  /** Does it show the thing asked about was skipped, deferred or left out? */
+  notHandled: number;
+}
+
+export type VerdictLabel = 'yes' | 'no' | 'partly' | 'unclear' | 'not discussed';
+
+/** Jev's yes/no answer to a reviewer's yes/no question, from the turn notes, picked turns and code search. */
+export interface Verdict {
+  label: VerdictLabel;
+  /** Jev's probability behind the label, 0–1. */
+  confidence: number;
+  /** The turn where the conversation settled it, when one did. */
+  sessionId?: string;
+  turn?: number;
+}
+
+/** Stored on a quick ask (StoredAsk.quick): how src/quick answered a whole-page question. */
+export interface QuickAskInfo {
+  /** What was asked about: "session <id8>" or "<base>..<head>". */
+  target: string;
+  /** Only for yes/no questions. */
+  verdict?: Verdict;
+  /** How the written answer starts ("Yes…" / "No…"), so the chip can follow the answer and show Jev's view beside it. */
+  lead?: 'yes' | 'no';
+  /** Turns whose full text and diff went to the answer, in conversation order. */
+  used: { sessionId: string; turn: number }[];
+  /** Every turn Jev scored. */
+  scores: TurnScore[];
+  /** Set when the question was checked against the code (git grep at the PR head or the session's last snapshot). */
+  codeSearch?: { where: string; patterns: { text: string; regex: boolean; matches: number; hits: { path: string; line: number; text: string }[] }[] };
+  usage: { jevRequests: number; jevInputTokens: number; geminiInputTokens: number; geminiOutputTokens: number };
+  models: { jev: string; gemini: string };
+}
+
+/** "At a glance" (src/quick/glance.ts → viewer): a headline, one line per turn, and why/where per changed file. */
+export interface GlanceTurn {
+  sessionId: string;
+  turn: number;
+  asked: string;
+  did: string;
+  minor: boolean;
+}
+
+/** One changed line, for "where did it change": new-side line number (old side for pure deletions). */
+export interface Spot {
+  line: number;
+  kind: 'add' | 'del';
+  text: string;
+}
+
+export interface GlanceFile {
+  path: string;
+  /** Why the file changed; '' until the model has written it. */
+  why: string;
+  spots: Spot[];
+  /** Changed lines not shown as spots. */
+  moreSpots: number;
+}
+
+/** A change the work made that nobody asked for, checked against the diff, with where its reason came from. */
+export interface BeyondItem {
+  /** Plain words: "removed the error shown when no TypeSafe key is set". */
+  change: string;
+  /** Files where the diff shows it. */
+  paths: string[];
+  /** The reason the AI gave in the conversation; '' when it never explained. */
+  reason: string;
+  /** False when the conversation never mentions this change at all (only the diff shows it). */
+  mentioned: boolean;
+}
+
+/** A name the work took out of the code (env var, URL host), and where the resulting code still has it. No model. */
+export interface Leftover {
+  name: string;
+  /** Files whose removed lines had it. */
+  removedFrom: string[];
+  /** Where the code at the end of the work still has it. `wrote`: a line the change itself added. */
+  stillIn: { path: string; line: number; text: string; wrote?: boolean }[];
+  /** Matches beyond `stillIn`. */
+  more: number;
+}
+
+export interface Glance {
+  headline: string;
+  turns: GlanceTurn[];
+  /** Changes beyond what was asked; [] until the model has compared requests with the diff. */
+  beyond?: BeyondItem[];
+  files: GlanceFile[];
+  source: 'gemini' | 'basic';
+  model?: string;
+}

@@ -6,6 +6,7 @@
 import { randomBytes } from 'node:crypto';
 import { catFileBatch, git, gitMaybe, hashBlob, lsTree, mktree } from '../core/git.ts';
 import type { AskResult } from '../core/types.ts';
+import type { QuickAskInfo } from '../quick/types.ts';
 import type { StateSource } from './materialize.ts';
 import { commitEnv } from './session.ts';
 
@@ -20,6 +21,8 @@ export interface StoredAsk extends AskResult {
   model?: string;
   /** Repo state the answer was produced against. */
   state?: { source: StateSource; commit: string; tree: string };
+  /** Set on quick asks (`promptlog ask` without --at): Jev scores, verdict, the turns that answered. */
+  quick?: QuickAskInfo;
 }
 
 /** `20260925T190102Z-3fa9c1`: sortable by time, unique across machines. */

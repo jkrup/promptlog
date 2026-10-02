@@ -5,6 +5,10 @@ import { join } from 'node:path';
 
 export const ROOT = new URL('..', import.meta.url).pathname;
 
+// Tests never read the developer's own keys (~/.config/promptlog/config.json), so they can't make real API calls.
+// Live tests (PL_LIVE=1) keep the real config.
+if (process.env.PL_LIVE !== '1') process.env.XDG_CONFIG_HOME = realpathSync(mkdtempSync(join(tmpdir(), 'pl-xdg-')));
+
 export interface DemoIds {
   sessionA: string;
   sessionB: string;

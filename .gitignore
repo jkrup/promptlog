@@ -1,3 +1,5 @@
 node_modules/
 .promptlog-tmp/
 *.log
+.claude/settings.local.json
+.promptlog/*.local.json

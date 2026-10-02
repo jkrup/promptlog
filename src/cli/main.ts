@@ -23,7 +23,10 @@ Browse
   summarize [<base>..<head>] Reviewer summary: pushbacks, open loops, plan vs diff, risks
 
 Interrogate
-  ask <session> --at <turn> "question"   Ask a question against the conversation + repo state at a turn
+  ask [<session>|<base>..<head>] "question"  Quick answer from the whole conversation (Dopp + Gemini Flash;
+                                         keys: DOPP_TOKEN, GEMINI_API_KEY or ~/.config/promptlog/config.json)
+  ask <session> --at <turn> "question"   Ask a question against the conversation + repo state at a turn (Claude Code)
+  map [<session>|<base>..<head>]         Per-turn notes quick asks search (what was done, decided, deferred)
   asks <session>                         List past questions asked against a session
   fork <session> --at <turn> [--exec]    Continue the conversation from a turn in a new worktree
 `;

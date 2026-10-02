@@ -9,7 +9,7 @@ Prompt-native code review: capture Claude Code conversations into git refs, revi
 - Git access goes through `src/core/git.ts` (sync spawn). Never touch the user's index or worktree from capture code.
 - Hooks must never fail the agent: catch, log to `<git-dir>/promptlog/errors.log`, exit 0.
 - CLI subcommands live in `src/cli/commands/<name>.ts` and export `run(args): Promise<number|void>`. They're discovered by filename, so there's no registry to edit.
-- Code layout: `src/core` (types, git, transcript, store, review) is shared, so change it carefully. Feature areas: `src/capture`, `src/viewer`, `src/ask`, `src/summarize`.
+- Code layout: `src/core` (types, git, transcript, store, review) is shared, so change it carefully. Feature areas: `src/capture`, `src/viewer`, `src/ask`, `src/summarize`, `src/quick` (quick asks: Jev + Gemini Flash over plain HTTPS, no SDKs).
 - Viewer HTML is rendered by pure functions (model → HTML string) so it can later run on Cloudflare Workers.
 
 ## Fixtures
