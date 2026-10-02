@@ -1,0 +1,11 @@
+.git
+node_modules
+**/node_modules
+.claude
+.promptlog
+fixtures
+docs
+test
+cloud/viewer/src
+cloud/viewer/.wrangler
+*.log
