@@ -21,14 +21,27 @@ export interface GitOpts {
   allowFail?: boolean;
 }
 
+/** No git call should take this long. A stuck one (seen once, at 0% CPU, cause unknown) would otherwise hang a hook forever. */
+function gitTimeoutMs(): number {
+  const n = Number(process.env.PL_GIT_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 120_000;
+}
+
 export function gitBuf(args: string[], opts: GitOpts): Buffer | null {
+  const timeout = gitTimeoutMs();
   const res = spawnSync('git', args, {
     cwd: opts.cwd,
     input: opts.input,
     env: { ...process.env, ...opts.env },
     maxBuffer: 1024 * 1024 * 512,
+    timeout,
   });
-  if (res.error) throw res.error;
+  if (res.error) {
+    if ((res.error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
+      throw new GitError(args, `timed out after ${Math.round(timeout / 1000)} s (cwd ${opts.cwd})`, null);
+    }
+    throw res.error;
+  }
   if (res.status !== 0) {
     if (opts.allowFail) return null;
     throw new GitError(args, res.stderr.toString(), res.status);

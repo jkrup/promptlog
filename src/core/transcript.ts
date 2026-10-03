@@ -82,6 +82,17 @@ export function cleanPromptText(text: string): string {
     .trim();
 }
 
+/**
+ * The part of a prompt worth naming a session after: the person's own words, not text they pasted.
+ * Pasted blocks arrive wrapped as `<pasted_content …>…</pasted_content …>`; when there's nothing else, use what was pasted.
+ */
+export function titleText(prompt: string): string {
+  const PASTE = /<pasted_content\b[^>]*>([\s\S]*?)<\/pasted_content\b[^>]*>/g;
+  const own = prompt.replace(PASTE, ' ').trim();
+  const text = own || [...prompt.matchAll(PASTE)].map((m) => m[1]!).join('\n');
+  return text.replace(/<\/?pasted_content\b[^>]*>/g, '').trim();
+}
+
 /** True for prompts that are terminal commands (`!ls`, bash mode) or slash commands, not requests to the agent. */
 export function isCommandPrompt(prompt: string): boolean {
   return /^\s*(?:!|<bash-input>|<bash-stdout>|\/[a-z][\w:-]*(?:\s|$))/i.test(prompt);
