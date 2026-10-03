@@ -185,7 +185,10 @@ test('render layer is pure: no Node APIs, only pure imports', () => {
   for (const f of ['render.ts', 'html.ts', 'markdown.ts', 'diff.ts', 'styles.ts', 'client.ts', 'mock.ts', 'types.ts']) {
     const src = readFileSync(join(ROOT, 'src/viewer', f), 'utf8');
     assert.doesNotMatch(src, /from 'node:|require\(|process\./, f);
-    for (const m of src.matchAll(/^(?:import|export)\b[^;]*?\bfrom '([^']+)'/gm)) assert.ok(m[1]!.startsWith('./') || m[1] === '../core/types.ts', `${f} imports ${m[1]}`);
+    for (const m of src.matchAll(/^(?:import|export)\b[^;]*?\bfrom '([^']+)'/gm)) assert.ok(m[1]!.startsWith('./') || m[1] === '../core/types.ts' || m[1] === '../core/diff.ts', `${f} imports ${m[1]}`);
   }
+  // The diff parser lives in core (attribution uses it) but must stay as pure as the render layer.
+  const coreDiff = readFileSync(join(ROOT, 'src/core/diff.ts'), 'utf8');
+  assert.doesNotMatch(coreDiff, /from 'node:|require\(|process\.|^import /m, 'core/diff.ts');
   assert.doesNotThrow(() => new Function(CLIENT_SCRIPT), 'client island is valid JS after type stripping');
 });

@@ -1,6 +1,8 @@
 // Shared data model. Every module (capture, viewer, ask/fork, summarize) builds on these types.
 // On-disk layout is documented in docs/format.md; keep the two in sync.
 
+import type { Attribution } from './attribution.ts';
+
 export const SCHEMA_VERSION = 1;
 export const REF_PREFIX = 'refs/promptlog/sessions/';
 
@@ -118,6 +120,8 @@ export interface SessionSlice {
   toTurn: number;
   /** Turns inside the slice that produced commits in the range. */
   committingTurns: number[];
+  /** Turns inside the slice that wrote lines of the range's diff (whether or not they committed). */
+  workTurns?: number[];
 }
 
 export interface Review {
@@ -127,6 +131,8 @@ export interface Review {
   commits: CommitInfo[];
   slices: SessionSlice[];
   sessions: Record<string, Session>;
+  /** Which turn wrote each changed line of the range (src/core/attribution.ts). */
+  attribution?: Attribution;
 }
 
 // ---------------------------------------------------------------------------
