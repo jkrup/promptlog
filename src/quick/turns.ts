@@ -25,6 +25,7 @@ export function fileLines(t: Turn, max: number): string[] {
 /** Jev's view of a turn. Descriptive keys, since Jev reads literally. */
 export function turnCard(t: Turn, note?: TurnNote): Record<string, unknown> {
   return {
+    ...(t.from ? { message_from_session: t.from } : {}),
     human_prompt: clipMiddle(t.prompt, 1500),
     ai_final_reply: clipMiddle(t.finalResponse ?? '', 1500),
     tools_used: toolLines(t, 15),
@@ -42,7 +43,7 @@ export function turnDiff(cwd: string, t: Turn): string {
 
 /** Gemini's view of a turn picked as evidence. */
 export function turnEvidence(label: string, t: Turn, note: TurnNote | undefined, diff: string, diffTokens = 2500): string {
-  const out = [`### ${label}${t.timestamp ? ` (${t.timestamp.slice(0, 16).replace('T', ' ')})` : ''}`, '', 'Human prompt:', clipMiddle(t.prompt, 4000), ''];
+  const out = [`### ${label}${t.timestamp ? ` (${t.timestamp.slice(0, 16).replace('T', ' ')})` : ''}`, '', t.from ? `Message from another Claude session (${t.from}):` : 'Human prompt:', clipMiddle(t.prompt, 4000), ''];
   const texts = aiTexts(t);
   if (texts.length) out.push('AI replies, in order:', clipMiddle(texts.join('\n\n'), 6000), '');
   const tools = toolLines(t, 30);

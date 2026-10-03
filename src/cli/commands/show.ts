@@ -9,7 +9,7 @@ export function resolveSessionId(cwd: string, prefix: string): string | null {
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s);
 
 export function formatTurn(t: Turn): string {
-  const lines = [`── turn ${t.index} ${t.timestamp ?? ''} ${t.model ?? ''}`.trimEnd(), `> ${t.prompt.replace(/\n/g, '\n> ')}`];
+  const lines = [`── turn ${t.index} ${t.timestamp ?? ''} ${t.model ?? ''}`.trimEnd(), `> ${t.from ? `[message from ${t.from}] ` : ''}${t.prompt.replace(/\n/g, '\n> ')}`];
   const tools = t.items.filter((i) => i.kind === 'tool');
   if (tools.length) lines.push(`  [${tools.length} tool calls: ${[...new Set(tools.map((x) => x.name))].join(', ')}]`);
   if (t.finalResponse) lines.push(clip(t.finalResponse.trim(), 600).replace(/^/gm, '  '));

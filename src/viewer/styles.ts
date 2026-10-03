@@ -187,6 +187,7 @@ a.badge:hover { text-decoration: none; filter: brightness(.95); }
 .annot { display: inline-flex; flex-wrap: wrap; gap: 5px; }
 .annot:empty { display: none; }
 .gist { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; font-style: italic; }
+.from-peer { margin-top: 10px; font-size: 13px; color: var(--muted); }
 .prompt { margin-top: 10px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--c); border-radius: 12px; padding: 14px 18px; font-size: 16.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; box-shadow: var(--shadow); color: var(--text); }
 .prompt code { font-size: .86em; background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
 

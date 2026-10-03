@@ -321,7 +321,11 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
     }
     const chunk = chunks[i - 1]!;
     const prevItems = prevEntry ? lsTree(root, prevEntry.sha) : [];
-    const meta: TurnMeta = (prevEntry && readJsonAt<TurnMeta>(root, `${prevEntry.sha}:meta.json`)) || { schema: SCHEMA_VERSION, index: i, commits: [] };
+    // Keep what an earlier capture knew about this turn only if it is the same prompt: turn numbers shift when the
+    // parser learns to split differently (e.g. messages from other sessions became their own turns).
+    const prevMeta = prevEntry ? readJsonAt<TurnMeta>(root, `${prevEntry.sha}:meta.json`) : null;
+    const samePrompt = !prevMeta?.promptUuid || !chunk.promptUuid || prevMeta.promptUuid === chunk.promptUuid;
+    const meta: TurnMeta = (samePrompt && prevMeta) || { schema: SCHEMA_VERSION, index: i, commits: [] };
     meta.index = i;
     meta.promptUuid = chunk.promptUuid ?? meta.promptUuid;
     meta.model = normalized[i - 1]?.model ?? meta.model;

@@ -82,6 +82,8 @@ export interface Turn {
   promptUuid?: string;
   /** The human's prompt, with system-injected blocks stripped. */
   prompt: string;
+  /** Set when the turn started with a message from another Claude session instead of the human: its session name. */
+  from?: string;
   timestamp?: string;
   items: TurnItem[];
   /** Last assistant text in the turn: what the human saw as "the answer". */

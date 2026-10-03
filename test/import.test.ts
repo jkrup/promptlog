@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git, GitError } from '../src/core/git.ts';
 import { readStoredSession } from '../src/core/store.ts';
-import { commitClues, titleText } from '../src/core/transcript.ts';
+import { commitClues, normalize, titleText } from '../src/core/transcript.ts';
 import { tempRepo } from './helpers.ts';
 import { gitc, pl, Session, Transcript } from './capture-helpers.ts';
 
@@ -94,4 +94,33 @@ test('import links each turn to the commits it made, by id or (after a history r
   // No snapshots in an import: the trees around each turn's commits stand in, so its files and diff show.
   assert.deepEqual(turns.map((t) => (t.meta.filesChanged ?? []).map((f) => f.path)), [['a.txt'], ['b.txt'], []]);
   assert.equal(turns[0]!.meta.stateSource, 'commits');
+});
+
+test('a message from another Claude session is its own turn, labelled with the sender', () => {
+  const t = new Transcript();
+  t.human('fix the dropdown');
+  t.text('on it');
+  t.raw({
+    type: 'user',
+    isMeta: true,
+    promptId: 'p-peer',
+    origin: { kind: 'peer', name: 'Blog SEO audit', body: 'Field report: the combobox never shows TXT.' },
+    message: { role: 'user', content: 'Another Claude session sent a message:\n<cross-session-message from="x">Field report: the combobox never shows TXT.</cross-session-message>' },
+  });
+  t.text('thanks, fixing');
+  const turns = normalize(t.lines).filter((x) => x.index > 0);
+  assert.equal(turns.length, 2);
+  assert.equal(turns[1]!.from, 'Blog SEO audit');
+  assert.equal(turns[1]!.prompt, 'Field report: the combobox never shows TXT.');
+  assert.equal(turns[0]!.from, undefined);
+});
+
+test('commitClues: a command that makes three commits and lists four claims the three', () => {
+  const t = new Transcript();
+  t.human('branch and commit');
+  t.toolResult(
+    t.toolUse('Bash', { command: 'git switch -c x && git commit -qm "One" && git commit -qm "Two" && git commit -qm "Three" && git log --oneline -4' }),
+    "Switched to a new branch 'x'\n3333333 Three\n2222222 Two\n1111111 One\n0000000 Older, from before",
+  );
+  assert.deepEqual(commitClues(t.lines).ids, ['3333333', '2222222', '1111111']);
 });

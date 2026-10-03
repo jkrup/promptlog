@@ -13,7 +13,8 @@ export interface RawEntry {
   isSidechain?: boolean;
   isMeta?: boolean;
   isCompactSummary?: boolean;
-  origin?: { kind?: string };
+  /** kind 'human' for typed prompts; 'peer' for a message from another Claude session (name = its session name). */
+  origin?: { kind?: string; name?: string; body?: string };
   sessionId?: string;
   version?: string;
   cwd?: string;
@@ -61,6 +62,8 @@ const INJECTED_PREFIX = /^\s*<(local-command-stdout|local-command-stderr|local-c
  * Newer Claude Code versions tag these with origin.kind === 'human'; older ones need heuristics.
  */
 export function isHumanPrompt(e: RawEntry): boolean {
+  // A message from another Claude session starts a turn too: the session works on it like on a prompt.
+  if (isPeerMessage(e)) return true;
   if (e.type !== 'user' || e.isSidechain || e.isMeta || e.isCompactSummary) return false;
   const content = e.message?.content;
   const blocks = blocksOf(content);
@@ -70,6 +73,11 @@ export function isHumanPrompt(e: RawEntry): boolean {
   if (!text.trim()) return blocks.some((b) => b.type === 'image');
   if (INTERRUPT_MARKER.test(text)) return false;
   return !INJECTED_PREFIX.test(text);
+}
+
+/** A message another Claude session sent this one (Claude Code marks it origin.kind 'peer'; it arrives as isMeta). */
+export function isPeerMessage(e: RawEntry): boolean {
+  return e.type === 'user' && !e.isSidechain && e.origin?.kind === 'peer';
 }
 
 /** Strip system-injected blocks from prompt text; keep what the human typed. */
@@ -89,6 +97,8 @@ export interface CommitClues {
 }
 
 const COMMIT_CMD = /\bgit\b[^\n]*?\b(?:commit|cherry-pick|merge|revert|am)\b/;
+/** One git invocation that makes a commit (several can share a command line, joined by && or ;). */
+const COMMIT_CALL = /\bgit\s+(?:-c\s+\S+\s+)*(?:commit|cherry-pick|merge|revert|am)\b/g;
 
 /**
  * Commit clues from a turn's raw transcript lines. Only tool calls that run a committing git command count. Their output
@@ -114,7 +124,10 @@ export function commitClues(lines: string[]): CommitClues {
       } else if (b.type === 'tool_result' && b.tool_use_id && commands.has(b.tool_use_id)) {
         const c = (b as { content?: unknown }).content;
         const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => (x && typeof x === 'object' && 'text' in x ? String(x.text) : '')).join('\n') : '';
-        for (const m of text.matchAll(/^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]|^([0-9a-f]{7,40})\b/gm)) ids.add((m[1] ?? m[2])!);
+        // As many ids as the command made commits: a `git log -4` after three commits lists an older one too.
+        const made = Math.max(1, (commands.get(b.tool_use_id)!.match(COMMIT_CALL) ?? []).length);
+        const found = [...text.matchAll(/^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]|^([0-9a-f]{7,40})\b/gm)].map((m) => (m[1] ?? m[2])!);
+        for (const id of found.slice(0, made)) ids.add(id);
       }
     }
   }
@@ -204,7 +217,16 @@ export function normalize(lines: string[]): Turn[] {
     if (!e) continue;
 
     if (isHumanPrompt(e)) {
-      current = { index: turns.filter((t) => t.index > 0).length + 1, promptUuid: e.uuid, prompt: promptText(e), timestamp: e.timestamp, items: [] };
+      const peer = isPeerMessage(e);
+      current = {
+        index: turns.filter((t) => t.index > 0).length + 1,
+        promptUuid: e.uuid,
+        // A peer message's text sits in the envelope Claude Code wraps around it; origin.body is just the message.
+        prompt: peer && typeof e.origin?.body === 'string' ? e.origin.body : promptText(e),
+        ...(peer ? { from: e.origin?.name || 'another Claude session' } : {}),
+        timestamp: e.timestamp,
+        items: [],
+      };
       turns.push(current);
       continue;
     }

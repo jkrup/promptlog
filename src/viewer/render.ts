@@ -486,11 +486,12 @@ export function renderTurn(ctx: RenderCtx, session: Session, t: Turn, extras: Tu
 <article class="turn c${label?.color ?? 0}" id="${aid}" data-session="${sid}" data-turn="${t.index}">
 <header class="turn-head">
   <a class="tlabel" href="#${aid}" title="Link to this turn">${turnLabel(ctx, sid, t.index)}</a>
-  <span class="avatar" aria-hidden="true">${initials(author)}</span><span class="who">${author ?? 'Human'}</span>
+  <span class="avatar" aria-hidden="true">${initials(t.from ?? author)}</span><span class="who">${t.from ?? author ?? 'Human'}</span>
   ${time(t.timestamp ?? t.meta?.startedAt, 'when')}
   <span class="annot" data-annot="${aid}">${ann?.badges ?? ''}</span>
 </header>
 ${ann?.gist ? html`<div class="gist" data-gist="${aid}">${ann.gist}</div>` : html`<div class="gist" data-gist="${aid}" hidden></div>`}
+${t.from ? html`<div class="from-peer">Message from <strong>${t.from}</strong> (another Claude session)</div>` : ''}
 <div class="prompt">${renderPrompt(t.prompt)}</div>
 <div class="ai">
   <div class="ai-head"><span class="ai-dot" aria-hidden="true"></span><span>Claude</span>${t.model ? html`<span class="muted">${shortModel(t.model)}</span>` : ''}${toolCount ? html`<span class="muted">· ${plural(toolCount, 'tool call')}</span>` : ''}${dur ? html`<span class="muted">· ${dur}</span>` : ''}</div>
