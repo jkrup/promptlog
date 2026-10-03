@@ -14,6 +14,8 @@ Capture
   import <transcript.jsonl>  Import an existing Claude Code transcript (no per-turn snapshots)
   push [remote]              Push captured sessions (refs/promptlog/*)
   fetch [remote]             Fetch teammates' sessions (keeps local unpushed turns)
+  mirror                     Push this branch + sessions to the review remote now. Hooks do it after every commit
+                             when there is one: a remote named "artifacts", or git config promptlog.mirror <remote>
 
 Browse
   ls                         List captured sessions

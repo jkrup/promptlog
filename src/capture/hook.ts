@@ -7,6 +7,7 @@ import type { SessionMeta } from '../core/types.ts';
 import { isHumanPrompt, parseEntry } from '../core/transcript.ts';
 import { forkParent, type ForkMarkerReader } from './fork.ts';
 import { repoRedactor } from './redact.ts';
+import { startMirror } from './mirror.ts';
 import { readCaptureState, withSessionLock, writeCaptureState, type CaptureState, type SubagentRecord } from './state.ts';
 
 export interface HookPayload {
@@ -88,10 +89,14 @@ function handleLocked(event: string, payload: HookPayload, ctx: Ctx, opts: HookO
         break;
       }
       case 'Stop': {
-        const res = capture(ctx, state, event, opts, { pending: state.pending, stateAfter: snapshot(), headAfter: headSha(root), endedAt: now });
+        const headAfter = headSha(root);
+        const committed = !!state.pending && !!headAfter && state.pending.headBefore !== headAfter;
+        const res = capture(ctx, state, event, opts, { pending: state.pending, stateAfter: snapshot(), headAfter, endedAt: now });
         if (res) {
           state.pending = undefined;
           state.turnsSinceCommit = [...new Set([...(state.turnsSinceCommit ?? []), res.currentTurn])];
+          // The commit's own push ran mid-turn; this one carries the conversation of the turn that made it.
+          if (committed) startMirror(root);
         }
         break;
       }
