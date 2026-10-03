@@ -160,9 +160,10 @@ export function basicGlance(input: GlanceInput, notes?: Map<string, TurnNote>): 
       return {
         sessionId,
         turn: t.index,
-        asked: n?.asked || clipEnd(displayPrompt(t.prompt).split('\n')[0]!.trim(), 140),
+        // A message from another Claude session says so up front: the reader shouldn't take it for the human's ask.
+        asked: (t.from ? `Message from ${t.from}: ` : '') + (n?.asked || clipEnd(displayPrompt(t.prompt).split('\n')[0]!.trim(), 140)),
         did: n?.did || firstSentence(t.finalResponse ?? '', 220),
-        minor: n ? n.minor : isCommandPrompt(t.prompt),
+        minor: t.from ? false : n ? n.minor : isCommandPrompt(t.prompt),
       };
     }),
   );
