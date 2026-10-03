@@ -82,6 +82,45 @@ export function cleanPromptText(text: string): string {
     .trim();
 }
 
+/** What a turn's own tool calls say about commits they made: ids printed after a commit, and the messages used. */
+export interface CommitClues {
+  ids: string[];
+  subjects: string[];
+}
+
+const COMMIT_CMD = /\bgit\b[^\n]*?\b(?:commit|cherry-pick|merge|revert|am)\b/;
+
+/**
+ * Commit clues from a turn's raw transcript lines. Only tool calls that run a committing git command count. Their output
+ * gives ids: `[<branch> <sha>] <subject>` from git itself, or a line starting with an id (`git log --oneline -1` after
+ * `git commit -q`). Their `-m` gives the subject. Candidates only: callers check them against the repo.
+ */
+export function commitClues(lines: string[]): CommitClues {
+  const ids = new Set<string>();
+  const subjects = new Set<string>();
+  const commands = new Map<string, string>();
+  for (const line of lines) {
+    const e = parseEntry(line);
+    for (const b of blocksOf(e?.message?.content)) {
+      if (b.type === 'tool_use') {
+        const cmd = (b as { input?: { command?: unknown } }).input?.command;
+        if (typeof cmd === 'string' && COMMIT_CMD.test(cmd) && b.id) {
+          commands.set(b.id, cmd);
+          for (const m of cmd.matchAll(/(?:^|\s)-[a-zA-Z]*m\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/g)) {
+            const subject = (m[1] ?? m[2] ?? '').replace(/\$\(cat <<'?EOF'?\n?/, '').split('\n')[0]!.trim();
+            if (subject) subjects.add(subject);
+          }
+        }
+      } else if (b.type === 'tool_result' && b.tool_use_id && commands.has(b.tool_use_id)) {
+        const c = (b as { content?: unknown }).content;
+        const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => (x && typeof x === 'object' && 'text' in x ? String(x.text) : '')).join('\n') : '';
+        for (const m of text.matchAll(/^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]|^([0-9a-f]{7,40})\b/gm)) ids.add((m[1] ?? m[2])!);
+      }
+    }
+  }
+  return { ids: [...ids], subjects: [...subjects] };
+}
+
 /**
  * The part of a prompt worth naming a session after: the person's own words, not text they pasted.
  * Pasted blocks arrive wrapped as `<pasted_content …>…</pasted_content …>`; when there's nothing else, use what was pasted.

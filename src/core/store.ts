@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { catFileBatch, currentBranch, git, gitDir, gitMaybe, hashBlob, headSha, lsTree, mktree, type TreeEntry } from './git.ts';
-import { isCommandPrompt, normalize, splitByTurn, titleText, transcriptFacts } from './transcript.ts';
+import { commitClues, isCommandPrompt, type CommitClues, normalize, splitByTurn, titleText, transcriptFacts } from './transcript.ts';
 import { REF_PREFIX, SCHEMA_VERSION, type FileChange, type Session, type SessionMeta, type TurnMeta } from './types.ts';
 
 export const turnDirName = (index: number) => String(index).padStart(6, '0');
@@ -185,6 +185,40 @@ export interface CaptureResult {
   currentTurn: number;
 }
 
+/**
+ * Commits in this repo that a turn's clues point to: ids that exist, then subjects that name exactly one commit
+ * (history rewrites and squashes keep the message but not the id). Short or repeated subjects are too weak to use.
+ */
+function resolveCommits(root: string, clues: CommitClues, subjects: () => Map<string, string | null>): string[] {
+  const out: string[] = [];
+  for (const id of clues.ids) {
+    const sha = gitMaybe(['rev-parse', '--verify', '-q', `${id}^{commit}`], { cwd: root });
+    if (sha && !out.includes(sha)) out.push(sha);
+  }
+  if (out.length === 0) {
+    for (const subject of clues.subjects) {
+      const sha = subject.length >= 12 ? subjects().get(subject) : null;
+      if (sha && !out.includes(sha)) out.push(sha);
+    }
+  }
+  return out;
+}
+
+/** subject -> commit id for every commit in the repo; null when several commits share the subject. Built on first use. */
+function subjectIndex(root: string): () => Map<string, string | null> {
+  let map: Map<string, string | null> | undefined;
+  return () => {
+    if (map) return map;
+    map = new Map();
+    for (const line of (gitMaybe(['log', '--exclude=refs/promptlog/*', '--all', '--format=%H%x00%s'], { cwd: root }) ?? '').split('\n')) {
+      const [sha, subject] = line.split('\0');
+      if (!sha || !subject) continue;
+      map.set(subject, map.has(subject) ? null : sha);
+    }
+    return map;
+  };
+}
+
 function blobEntry(root: string, name: string, content: string): TreeEntry {
   return { mode: '100644', type: 'blob', sha: hashBlob(root, content), name };
 }
@@ -268,6 +302,7 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
 
   const normalized = normalize(lines).filter((t) => t.index > 0);
   const turnEntries: TreeEntry[] = [];
+  const subjects = subjectIndex(root);
 
   for (let i = 1; i <= N; i++) {
     const name = turnDirName(i);
@@ -305,6 +340,9 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
       if (meta.stateBefore && meta.stateAfter) meta.filesChanged = diffTrees(root, meta.stateBefore, meta.stateAfter);
     }
     meta.commits ??= [];
+    // No recorded start/end HEAD (an import, or a turn captured without its prompt hook): use the commits git
+    // reported in the turn's own tool output, when they exist in this repo.
+    if (meta.commits.length === 0 && !meta.headAfter) meta.commits = resolveCommits(root, commitClues(chunk.lines), subjects);
 
     const own: TreeEntry[] = [
       blobEntry(root, 'meta.json', JSON.stringify(meta, null, 2) + '\n'),
