@@ -91,4 +91,7 @@ test('import links each turn to the commits it made, by id or (after a history r
   assert.equal(pl(repo, ['import', s.path, '--session', s.id]).status, 0);
   const turns = readStoredSession(repo, s.id)!.turns;
   assert.deepEqual(turns.map((t) => t.meta.commits), [[a], [b], []]);
+  // No snapshots in an import: the trees around each turn's commits stand in, so its files and diff show.
+  assert.deepEqual(turns.map((t) => (t.meta.filesChanged ?? []).map((f) => f.path)), [['a.txt'], ['b.txt'], []]);
+  assert.equal(turns[0]!.meta.stateSource, 'commits');
 });

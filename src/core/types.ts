@@ -51,6 +51,8 @@ export interface TurnMeta {
   stateAfter?: string;
   /** Files changed between stateBefore and stateAfter, i.e. what happened during this turn. */
   filesChanged?: FileChange[];
+  /** 'commits' when there were no snapshots (an import) and stateBefore/stateAfter are the trees around the turn's commits. */
+  stateSource?: 'commits';
   model?: string;
 }
 

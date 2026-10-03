@@ -177,6 +177,8 @@ export interface CaptureInput {
   redact?: Redactor;
   /** Extra files per turn, e.g. subagent transcripts: turn index -> { 'subagents/x.jsonl': content }. */
   extraFiles?: Map<number, Record<string, string>>;
+  /** Rewrite every turn, not just the last two (imports: older turns may have gained commit links). */
+  rebuild?: boolean;
 }
 
 export interface CaptureResult {
@@ -189,6 +191,9 @@ export interface CaptureResult {
  * Commits in this repo that a turn's clues point to: ids that exist, then subjects that name exactly one commit
  * (history rewrites and squashes keep the message but not the id). Short or repeated subjects are too weak to use.
  */
+/** git's empty tree, the "before" of a root commit. */
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
 function resolveCommits(root: string, clues: CommitClues, subjects: () => Map<string, string | null>): string[] {
   const out: string[] = [];
   for (const id of clues.ids) {
@@ -303,12 +308,13 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
   const normalized = normalize(lines).filter((t) => t.index > 0);
   const turnEntries: TreeEntry[] = [];
   const subjects = subjectIndex(root);
+  const claimed = new Set<string>();
 
   for (let i = 1; i <= N; i++) {
     const name = turnDirName(i);
     const prevEntry = prevTurns.get(name);
     const extra = Object.entries(input.extraFiles?.get(i) ?? {}).filter(([p]) => isSafeExtraPath(p));
-    const rewrite = i >= N - 1 || !prevEntry || extra.length > 0;
+    const rewrite = input.rebuild || i >= N - 1 || !prevEntry || extra.length > 0;
     if (!rewrite && prevEntry) {
       turnEntries.push(prevEntry);
       continue;
@@ -342,7 +348,28 @@ export function captureSession(input: CaptureInput): CaptureResult | null {
     meta.commits ??= [];
     // No recorded start/end HEAD (an import, or a turn captured without its prompt hook): use the commits git
     // reported in the turn's own tool output, when they exist in this repo.
-    if (meta.commits.length === 0 && !meta.headAfter) meta.commits = resolveCommits(root, commitClues(chunk.lines), subjects);
+    // A commit belongs to the first turn that reports it: a later `git log` printed after committing names old ones too.
+    // Turns without a recorded HEAD (imports) are worked out again on every capture, so a re-import picks up fixes.
+    if (!meta.headAfter) meta.commits = resolveCommits(root, commitClues(chunk.lines), subjects).filter((c) => !claimed.has(c));
+    for (const c of meta.commits) claimed.add(c);
+    // No snapshots but known commits: the code just before the first and after the last commit stands in for them,
+    // so diffs and "files changed" work for imported turns too.
+    if (meta.stateSource === 'commits') {
+      delete meta.stateBefore;
+      delete meta.stateAfter;
+      delete meta.stateSource;
+      delete meta.filesChanged;
+    }
+    if (!meta.stateBefore && !meta.stateAfter && meta.commits.length > 0) {
+      const before = gitMaybe(['rev-parse', '--verify', '-q', `${meta.commits[0]}^^{tree}`], { cwd: root }) ?? EMPTY_TREE;
+      const after = gitMaybe(['rev-parse', '--verify', '-q', `${meta.commits[meta.commits.length - 1]}^{tree}`], { cwd: root });
+      if (after) {
+        meta.stateBefore = before;
+        meta.stateAfter = after;
+        meta.stateSource = 'commits';
+        meta.filesChanged = diffTrees(root, before, after);
+      }
+    }
 
     const own: TreeEntry[] = [
       blobEntry(root, 'meta.json', JSON.stringify(meta, null, 2) + '\n'),

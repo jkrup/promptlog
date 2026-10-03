@@ -25,7 +25,7 @@ export function importTranscript(root: string, file: string, sessionId = basenam
   const state: CaptureState = { sessionId, transcriptPath, startedAt: new Date().toISOString() };
   if (existsSync(subDir)) state.subagents = readdirSync(subDir).filter((f) => f.endsWith('.jsonl')).map((f) => ({ path: join(subDir, f) }));
   const redact = repoRedactor(root, onWarning);
-  const res = captureSession({ root, sessionId, transcriptPath, redact, extraFiles: subagentFiles(state, transcriptPath) });
+  const res = captureSession({ root, sessionId, transcriptPath, redact, extraFiles: subagentFiles(state, transcriptPath), rebuild: true });
   return res ? { sessionId, turns: res.turnCount, subagents: state.subagents?.length ?? 0, commit: res.commit } : null;
 }
 
