@@ -87,11 +87,17 @@ export async function run(args: string[]): Promise<number> {
     say('Stop tracking them (git rm --cached, then add them to .gitignore), and rewrite old history if they are in it, then run `promptlog connect` again.');
     return 1;
   }
-  const push = spawnSync('git', ['push', '--no-verify', '--quiet', REMOTE, '+refs/heads/*:refs/heads/*', PUSH_REFSPEC], {
-    cwd: root,
-    encoding: 'utf8',
-    env: { ...process.env, PROMPTLOG_PUSHING: '1', GIT_TERMINAL_PROMPT: '0' },
-  });
+  // A repo created a moment ago can drop the first push ("RPC failed ... Broken pipe"): try a few times.
+  let push;
+  for (let attempt = 1; ; attempt++) {
+    push = spawnSync('git', ['push', '--no-verify', '--quiet', REMOTE, '+refs/heads/*:refs/heads/*', PUSH_REFSPEC], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, PROMPTLOG_PUSHING: '1', GIT_TERMINAL_PROMPT: '0' },
+    });
+    if (push.status === 0 || attempt === 4) break;
+    spawnSync('sleep', [String(3 * attempt)]);
+  }
   if (push.status !== 0) return fail(`first push failed: ${push.stderr.trim()}`);
   say(`Pushed ${heads.split('\n').length} branch(es) (${(big.total / 1e6).toFixed(0)} MB). From now on every commit pushes itself.`);
   return 0;

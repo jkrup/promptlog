@@ -2,7 +2,7 @@
   "name": "promptlog-viewer",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-30",
-  "vars": { "REPO": "demo-spike", "AI_GATEWAY": "default" },
+  "vars": { "REPO": "laya-pilot", "AI_GATEWAY": "default" },
   "ai": { "binding": "AI" },
   "artifacts": [{ "binding": "ARTIFACTS", "namespace": "promptlog" }],
   "containers": [
@@ -11,7 +11,7 @@
       "image": "./Dockerfile",
       "image_build_context": "../..",
       "instance_type": "basic",
-      "max_instances": 1
+      "max_instances": 4
     }
   ],
   "durable_objects": { "bindings": [{ "name": "VIEWER", "class_name": "Viewer" }] },

@@ -23,18 +23,25 @@ export class Viewer extends Container {
 }
 
 const COOKIE = 'pl_key';
+const REPO_COOKIE = 'pl_repo';
 const TOKEN_TTL_S = 3600;
-let cached: { remote: string; token: string; until: number } | undefined;
+const cached = new Map<string, { remote: string; token: string; until: number }>();
 
-async function access(env: Env): Promise<{ remote: string; token: string }> {
-  if (cached && cached.until > Date.now()) return cached;
-  const repo = await env.ARTIFACTS.get(env.REPO);
+async function access(env: Env, name: string): Promise<{ remote: string; token: string }> {
+  const hit = cached.get(name);
+  if (hit && hit.until > Date.now()) return hit;
+  const repo = await env.ARTIFACTS.get(name);
   const [{ remote }, t] = await Promise.all([repo.info(), repo.createToken('read', TOKEN_TTL_S)]);
   const token = String(t.plaintext ?? t.token ?? t.secret ?? '');
   if (!token) throw new Error('Artifacts returned no token');
-  cached = { remote, token, until: Date.now() + (TOKEN_TTL_S - 300) * 1000 };
-  return cached;
+  const entry = { remote, token, until: Date.now() + (TOKEN_TTL_S - 300) * 1000 };
+  cached.set(name, entry);
+  return entry;
 }
+
+const isRepoName = (s: string) => /^[a-z0-9][a-z0-9-]{0,62}$/.test(s);
+const cookieValue = (req: Request, name: string) =>
+  (req.headers.get('cookie') ?? '').split(/;\s*/).find((c) => c.startsWith(`${name}=`))?.slice(name.length + 1);
 
 function hasKey(req: Request, env: Env): boolean {
   const cookie = req.headers.get('cookie') ?? '';
@@ -70,14 +77,33 @@ export default {
     }
     if (!hasKey(req, env)) return denied();
 
-    const container = env.VIEWER.getByName(env.REPO);
+    // ?repo=<name> picks which Artifacts repo this browser looks at, and remembers it; the default is REPO.
+    const pick = url.searchParams.get('repo');
+    if (pick !== null) {
+      if (!isRepoName(pick)) return new Response('not a repo name\n', { status: 400 });
+      url.searchParams.delete('repo');
+      return new Response(null, {
+        status: 302,
+        headers: { location: url.pathname + url.search, 'set-cookie': `${REPO_COOKIE}=${pick}; Path=/; Max-Age=2592000; Secure; SameSite=Lax` },
+      });
+    }
+    const chosen = cookieValue(req, REPO_COOKIE);
+    const name = chosen && isRepoName(chosen) ? chosen : env.REPO;
+
+    const container = env.VIEWER.getByName(name);
     // A running container keeps its image across deploys; this restarts it on the latest one.
     if (url.pathname === '/__restart') {
       await container.destroy();
       return new Response('restarted; the next page load starts a fresh container\n', { headers: { 'content-type': 'text/plain' } });
     }
 
-    const { remote, token } = await access(env);
+    let repoAccess;
+    try {
+      repoAccess = await access(env, name);
+    } catch {
+      return new Response(`No repo named "${name}". Open /?repo=<name> with one that exists.\n`, { status: 404, headers: { 'content-type': 'text/plain' } });
+    }
+    const { remote, token } = repoAccess;
     const headers = new Headers(req.headers);
     headers.delete('cookie');
     headers.set('x-artifacts-remote', remote);
