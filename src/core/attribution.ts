@@ -6,7 +6,7 @@
 //      or the code inside a Bash command (agents often edit with scripts). Works for imported sessions too.
 //   3. none: the line came from outside the conversation (an edit by hand, another tool).
 // Short lines ("}", "return;") are too common to match on their own; they take the credit of the nearest credited
-// changed lines around them when those agree.
+// changed lines around them when those agree, or are matched together with the lines around them.
 import { gitBuf } from './git.ts';
 import { parseDiff, type DiffFile } from './diff.ts';
 import type { Session, Turn } from './types.ts';
@@ -55,7 +55,7 @@ function strings(v: unknown, out: string[] = []): string[] {
 }
 
 /** What a turn's writing tool calls contain, as one string (for substring checks) and as a set of whole lines. */
-function turnText(t: Turn): { blob: string; lines: Set<string> } {
+function turnText(t: Turn): { blob: string; lines: Set<string>; trimmed: string } {
   const parts: string[] = [];
   for (const it of t.items) if (it.kind === 'tool' && !NON_WRITING.has(it.name)) strings(it.input, parts);
   const lines = new Set<string>();
@@ -63,7 +63,8 @@ function turnText(t: Turn): { blob: string; lines: Set<string> } {
     const n = norm(l);
     if (n.length >= MIN_MATCH) lines.add(n);
   }
-  return { blob: parts.join('\n'), lines };
+  const blob = parts.join('\n');
+  return { blob, lines, trimmed: blob.split('\n').map(norm).join('\n') };
 }
 
 interface TurnRef {
@@ -113,7 +114,7 @@ export function attribute(cwd: string, diffText: string, sessions: Session[], op
   for (const tier of [...tiers].reverse()) for (const r of tier) for (const k of snapshotLines(cwd, r.turn)) bySnapshot.set(k, r);
 
   // 2. Conversation: the earliest turn whose writing tool calls contain the line.
-  const texts = new Map<TurnRef, { blob: string; lines: Set<string> }>();
+  const texts = new Map<TurnRef, ReturnType<typeof turnText>>();
   const textOf = (r: TurnRef) => texts.get(r) ?? (texts.set(r, turnText(r.turn)), texts.get(r)!);
   // Added lines go to the earliest turn that wrote them (later turns may quote them as context); removed lines to the
   // latest turn that mentions them (the one that took them out; earlier mentions are where they were written).
@@ -168,6 +169,44 @@ export function attribute(cwd: string, diffText: string, sessions: Session[], op
         if (sides.length && sides.every((c) => c.sessionId === sides[0]!.sessionId && c.turn === sides[0]!.turn)) credit.set(key, sides[0]!);
       });
     }),
+  );
+
+  // 4. A short line still without credit (often alone in its hunk, like one name added to an import list): look for it
+  //    together with the lines around it, which is distinctive even when the line alone isn't.
+  const byWindow = (window: string, latest: boolean): TurnRef | undefined => {
+    for (const tier of tiers) {
+      const order = latest ? [...tier].reverse() : tier;
+      for (const r of order) if (textOf(r).trimmed.includes(window)) return r;
+    }
+    return undefined;
+  };
+  files.forEach((f, fi) =>
+    f.hunks.forEach((h, hi) =>
+      h.lines.forEach((l, li) => {
+        if ((l.type !== 'add' && l.type !== 'del') || credit.get(lineKey(fi, hi, li))) return;
+        // Neighbours as they read in that version of the file: added lines live with context and other added lines,
+        // removed lines with context and other removed lines.
+        const side = (j: number) => {
+          const x = h.lines[j];
+          return x && x.type !== 'meta' && (x.type === 'ctx' || x.type === l.type) ? norm(x.text) : undefined;
+        };
+        let p = li - 1;
+        while (p >= 0 && h.lines[p]!.type !== 'ctx' && h.lines[p]!.type !== l.type) p--;
+        let n = li + 1;
+        while (n < h.lines.length && h.lines[n]!.type !== 'ctx' && h.lines[n]!.type !== l.type) n++;
+        const [before, after] = [side(p), side(n)];
+        const me = norm(l.text);
+        const windows = [before !== undefined && after !== undefined ? `${before}\n${me}\n${after}` : '', before !== undefined ? `${before}\n${me}` : '', after !== undefined ? `${me}\n${after}` : ''];
+        for (const w of windows) {
+          if (w.length < 2 * MIN_MATCH) continue;
+          const r = byWindow(w, l.type === 'del');
+          if (r) {
+            give(lineKey(fi, hi, li), r, 'conversation');
+            return;
+          }
+        }
+      }),
+    ),
   );
 
   // Per-turn totals, in the order the turns happened.

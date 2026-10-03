@@ -140,3 +140,18 @@ test('a PR picks up the turns that wrote its code, even when only a later turn c
   assert.equal(slice.fromTurn, 1);
   assert.equal(review.attribution!.totals.credited, 1);
 });
+
+test('a short line alone in its hunk is matched together with the lines around it', () => {
+  const repo = tempRepo();
+  const before = 'import {\n  ActResult,\n  AgentProgress,\n} from "./types";\n' + '\n'.repeat(20) + 'export const x = 1;\n';
+  writeFileSync(join(repo, 'a.ts'), before);
+  gitc(repo, 'add', '.');
+  gitc(repo, 'commit', '-qm', 'base');
+  const base = gitc(repo, 'rev-parse', 'HEAD').trim();
+  const t = new Transcript();
+  t.human('track the phase');
+  t.toolResult(t.toolUse('Bash', { command: "python3 - <<'EOF'\np='a.ts'; s=open(p).read()\ns=s.replace('''  ActResult,\n  AgentProgress,''', '''  ActResult,\n  AgentPhase,\n  AgentProgress,''')\nopen(p,'w').write(s)\nEOF" }), '');
+  writeFileSync(join(repo, 'a.ts'), before.replace('  ActResult,\n', '  ActResult,\n  AgentPhase,\n'));
+  gitc(repo, 'commit', '-qam', 'phase');
+  assert.deepEqual(credits(attribute(repo, diffOf(repo, base, 'HEAD'), [asSession(t)])), { '+AgentPhase,': '1:conversation' });
+});

@@ -116,7 +116,7 @@ export function fmtTime(iso: string | undefined): string {
   return `${months[Number(m[2]) - 1]} ${Number(m[3])}, ${m[4]}:${m[5]} UTC`;
 }
 
-function time(iso: string | undefined, cls = ''): Safe {
+export function time(iso: string | undefined, cls = ''): Safe {
   if (!iso) return html``;
   return html`<time datetime="${iso}"${cls ? raw(` class="${cls}"`) : ''}>${fmtTime(iso)}</time>`;
 }
@@ -137,7 +137,7 @@ function turnDuration(t: Turn): string {
   return fmtDuration(Date.parse(end) - Date.parse(start));
 }
 
-function initials(name: string | undefined): string {
+export function initials(name: string | undefined): string {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '')).toUpperCase() || '?';
@@ -412,7 +412,7 @@ function renderSegment(ctx: RenderCtx, seg: Segment): Safe {
 // ---------------------------------------------------------------------------
 
 /** Human prompt: escaped plain text, newlines kept, `code` spans highlighted. */
-function renderPrompt(prompt: string): Safe {
+export function renderPrompt(prompt: string): Safe {
   if (!prompt.trim()) return html`<span class="muted">(empty prompt)</span>`;
   const parts = prompt.split(/(`[^`\n]+`)/g);
   return html`${parts.map((p, i) => (i % 2 === 1 ? html`<code>${p.slice(1, -1)}</code>` : p))}`;

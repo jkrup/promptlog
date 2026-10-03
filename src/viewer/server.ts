@@ -10,7 +10,7 @@ import { parseDiff, renderDiff } from './diff.ts';
 import { toHtml } from './html.ts';
 import { loadAsk, loadQuick, loadSummarize, type AskModule, type Loaded, type QuickModule, type SummarizeModule } from './integrations.ts';
 import { mockSummary } from './mock.ts';
-import { buildIndexModel, buildReviewModel, buildSessionModel, displayTitle, isSafeRev, isSafeSessionId, resolveSession, turnDiff, turnRaw } from './model.ts';
+import { buildIndexModel, buildPrModel, buildReviewModel, buildSessionModel, displayTitle, isSafeRev, isSafeSessionId, resolveSession, turnDiff, turnRaw } from './model.ts';
 import {
   PAGE_SCRIPTS,
   renderAskResult,
@@ -28,6 +28,7 @@ import {
   renderSummaryUnavailable,
   reviewUrl,
 } from './render.ts';
+import { renderPrPage } from './pr.ts';
 import type { FeatureState, Features } from './types.ts';
 
 export interface ViewerModules {
@@ -220,6 +221,11 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
     }
 
     if (method === 'GET' && path === '/review') {
+      const { base, head } = reviewRange(url);
+      return send(res, 200, 'text/html', renderPrPage(buildPrModel(cwd, base, head, loadReview(base, head))));
+    }
+
+    if (method === 'GET' && path === '/review-old') {
       const { base, head } = reviewRange(url);
       const review = loadReview(base, head);
       const f = await features();

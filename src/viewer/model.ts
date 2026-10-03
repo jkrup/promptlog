@@ -1,13 +1,17 @@
 // Node side of the viewer: git + store -> plain view models for the pure render functions.
 import { basename } from 'node:path';
 import { gitBuf, gitMaybe, repoRoot } from '../core/git.ts';
+import { attribute, lineKey, turnId } from '../core/attribution.ts';
 import { assembleReview } from '../core/review.ts';
 import { diffTrees, listSessions, loadSession, readStoredSession } from '../core/store.ts';
 import { isCommandPrompt } from '../core/transcript.ts';
 import type { AskResult, Review, Session, Turn } from '../core/types.ts';
-import { basicGlance } from '../quick/glance.ts';
+import { basicGlance, displayPrompt } from '../quick/glance.ts';
+import { cachedNotes } from '../quick/map.ts';
 import { findLeftovers } from '../quick/leftovers.ts';
 import { sessionCode } from '../quick/scope.ts';
+import type { PrBlock, PrFile, PrFileLine, PrLine, PrPageModel, PrSession, PrTurn, PrTurnFile } from './pr.ts';
+import { anchorId as anchorFor } from './render.ts';
 import { turnKey, type BranchRow, type ExtrasMap, type Features, type IndexPageModel, type ReviewPageModel, type SessionPageModel, type SessionRow } from './types.ts';
 
 /** Quick asks (whole-page, Jev + Gemini) carry a `quick` block; deep asks at a turn don't. */
@@ -225,3 +229,129 @@ export function turnDiff(cwd: string, sessionId: string, turn: number, span: 'ag
   if (!from || !to) return { text: '', truncated: false };
   return gitDiff(cwd, from, to);
 }
+
+// ---------------------------------------------------------------------------
+// PR page: turns with the code each one wrote (src/core/attribution.ts), rendered by ./pr.ts
+// ---------------------------------------------------------------------------
+
+/** Context lines shown around each run of changed lines. */
+const PR_CONTEXT = 2;
+
+/** The start of Claude's reply, as plain text: its first paragraph, cut at a sentence end. */
+function replyStart(text: string, max = 260): string {
+  const para = text.split(/\n\s*\n/).map((p) => p.trim()).find((p) => p && !/^(#|```|\||- |\d+\. )/.test(p)) ?? text.trim();
+  const flat = para.replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  return end > 80 ? cut.slice(0, end + 1) : `${cut.trimEnd()}…`;
+}
+
+export function buildPrModel(cwd: string, base: string, head: string, review: Review): PrPageModel {
+  const a = review.attribution ?? attribute(cwd, '', []);
+  const names = new Map<string, string>();
+  for (const s of Object.values(review.sessions)) names.set(s.meta.sessionId, s.meta.author?.name ?? 'you');
+  const whoOf = (sessionId: string, turn: number): string => {
+    const t = review.sessions[sessionId]?.turns.find((x) => x.index === turn);
+    return t?.from ?? names.get(sessionId) ?? 'you';
+  };
+
+  // Blocks per turn: runs of consecutive changed lines with the same credit, with context around them.
+  const blocks = new Map<string, Map<string, PrBlock[]>>();
+  const files: PrFile[] = a.files.map((f, fi) => {
+    const path = f.status === 'D' ? f.oldPath : f.newPath;
+    const hunks: PrFileLine[][] = f.hunks.map((h, hi) => {
+      const out: PrFileLine[] = [];
+      // Changed-line positions per turn in this hunk; nearby ones merge into one block (no repeated context).
+      const mine = new Map<string, number[]>();
+      h.lines.forEach((l, li) => {
+        if (l.type === 'meta') return;
+        if (l.type === 'ctx') {
+          out.push({ kind: 'ctx', text: l.text, no: l.newNo });
+          return;
+        }
+        const c = a.credit.get(lineKey(fi, hi, li)) ?? null;
+        out.push({ kind: l.type, text: l.text, no: l.type === 'del' ? l.oldNo : l.newNo, by: c ? { sessionId: c.sessionId, turn: c.turn, who: whoOf(c.sessionId, c.turn) } : null });
+        if (c) mine.set(turnId(c.sessionId, c.turn), [...(mine.get(turnId(c.sessionId, c.turn)) ?? []), li]);
+      });
+      for (const [key, idx] of mine) {
+        const spans: [number, number][] = [];
+        for (const i of idx) {
+          const last = spans[spans.length - 1];
+          if (last && i - last[1] <= 2 * PR_CONTEXT + 1) last[1] = i;
+          else spans.push([i, i]);
+        }
+        for (const [start, end] of spans) {
+          const lines: PrLine[] = [];
+          for (let i = Math.max(0, start - PR_CONTEXT); i <= Math.min(h.lines.length - 1, end + PR_CONTEXT); i++) {
+            const l = h.lines[i]!;
+            if (l.type === 'meta') continue;
+            const ours = (l.type === 'add' || l.type === 'del') && idx.includes(i);
+            // Other turns' changes inside the span: their added lines are part of the file, so show them as context;
+            // their removed lines aren't, so leave them out.
+            if (!ours && l.type === 'del') continue;
+            lines.push({ kind: ours ? (l.type as 'add' | 'del') : 'ctx', text: l.text, no: l.type === 'del' ? l.oldNo : l.newNo });
+          }
+          const byPath = blocks.get(key) ?? new Map<string, PrBlock[]>();
+          byPath.set(path, [...(byPath.get(path) ?? []), { lines }]);
+          blocks.set(key, byPath);
+        }
+      }
+      return out;
+    });
+    return { path, status: f.status, additions: f.additions, deletions: f.deletions, hunks };
+  });
+
+  const labels = review.slices.map((sl) => sl.sessionId);
+  const sessions: PrSession[] = review.slices.map((sl) => {
+    const s = review.sessions[sl.sessionId]!;
+    const turns = s.turns.filter((t) => t.index >= sl.fromTurn && t.index <= sl.toTurn);
+    const notes = cachedNotes(cwd, sl.sessionId, turns);
+    return {
+      sessionId: sl.sessionId,
+      title: s.meta.title ?? sl.sessionId.slice(0, 8),
+      ...(s.meta.author?.name ? { author: s.meta.author.name } : {}),
+      color: labels.indexOf(sl.sessionId) % 6,
+      turns: turns.map((t): PrTurn => {
+        const credit = a.turns.get(turnId(sl.sessionId, t.index));
+        const byPath = blocks.get(turnId(sl.sessionId, t.index)) ?? new Map<string, PrBlock[]>();
+        const turnFiles: PrTurnFile[] = credit
+          ? [...credit.files].map(([path, c]) => ({ path, additions: c.additions, deletions: c.deletions, blocks: byPath.get(path) ?? [] }))
+          : [];
+        const note = notes.get(t.index);
+        const reply = t.finalResponse?.trim();
+        return {
+          sessionId: sl.sessionId,
+          turn: t.index,
+          ...(t.timestamp ? { at: t.timestamp } : {}),
+          who: t.from ?? names.get(sl.sessionId) ?? 'you',
+          fromAgent: !!t.from,
+          ask: displayPrompt(t.prompt),
+          command: isCommandPrompt(t.prompt),
+          ...(note?.did ? { did: { text: note.did, source: 'summary' as const } } : reply ? { did: { text: replyStart(reply), source: 'reply' as const } } : {}),
+          files: turnFiles.sort((x, y) => y.additions + y.deletions - (x.additions + x.deletions)),
+          additions: sumBy(turnFiles, (f) => f.additions),
+          deletions: sumBy(turnFiles, (f) => f.deletions),
+          toolCalls: t.items.filter((i) => i.kind === 'tool').length,
+          rawHref: `/session/${encodeURIComponent(sl.sessionId)}#${anchorFor(sl.sessionId, t.index)}`,
+        };
+      }),
+    };
+  });
+
+  const branch = gitMaybe(['rev-parse', '--verify', '-q', `refs/heads/${head}`], { cwd }) ? head : '';
+  const title = review.commits.length === 1 ? review.commits[0]!.subject : branch || review.commits.at(-1)?.subject || `${base}..${head}`;
+  return {
+    title,
+    base,
+    head,
+    commits: review.commits.map((c) => ({ sha: c.sha, subject: c.subject })),
+    coverage: { lines: a.totals.lines, credited: a.totals.credited },
+    sessions,
+    files,
+    repoName: repoName(cwd),
+    oldHref: `/review-old?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`,
+  };
+}
+
+const sumBy = <T>(xs: T[], f: (x: T) => number) => xs.reduce((n, x) => n + f(x), 0);

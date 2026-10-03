@@ -55,14 +55,25 @@ test('GET / lists branches with review links and all sessions', async () => {
   assert.match(body, /Add \/rates endpoint with caching/);
 });
 
-test('GET /review renders the page with past asks', async () => {
-  const res = await get('/review?base=main&head=feature%2Frates');
+test('GET /review-old renders the old page with past asks', async () => {
+  const res = await get('/review-old?base=main&head=feature%2Frates');
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.equal(body.split('<article class="turn').length - 1, 5);
   assert.match(body, /Earlier question\?/);
   assert.match(body, /data-src="\/api\/summary/);
-  assert.match(await (await get('/review?base=main&head=feature%2Frates&mockSummary=1')).text(), /Mock data\./);
+  assert.match(await (await get('/review-old?base=main&head=feature%2Frates&mockSummary=1')).text(), /Mock data\./);
+});
+
+test('GET /review: each turn with the code it wrote', async () => {
+  const res = await get('/review?base=main&head=feature%2Frates');
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /changed lines traced to the turn that wrote them/);
+  // Turn 1 and 2 of session A wrote the /rates code; each card lists its files.
+  assert.ok(body.split('<article class="pr-turn').length - 1 >= 2, 'work turns render as cards');
+  assert.match(body, /src\/server\.js/);
+  assert.match(body, /href="\/review-old\?base=main&amp;head=feature%2Frates"/);
 });
 
 test('bad input is rejected, not passed to git', async () => {
@@ -129,7 +140,7 @@ test('missing modules give a clear "not available yet" state', async () => {
   assert.match(sd.html, /Summary not available yet/);
   const a = await fetch(off.url + '/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: A, turn: 1, question: 'q' }) });
   assert.equal(a.status, 501);
-  const page = await (await get('/review?base=main&head=feature%2Frates', off)).text();
+  const page = await (await get('/review-old?base=main&head=feature%2Frates', off)).text();
   assert.match(page, /Summary not available yet/);
   assert.match(page, /not available yet/);
 });

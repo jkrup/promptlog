@@ -131,6 +131,17 @@ export interface MapResult {
   usage: { inputTokens: number; outputTokens: number };
 }
 
+/** Notes already cached for `turns` (still matching the turn's content). No model call. */
+export function cachedNotes(cwd: string, sessionId: string, turns: Turn[]): Map<number, TurnNote> {
+  const cache = readMapCache(cwd, sessionId);
+  const out = new Map<number, TurnNote>();
+  for (const t of turns) {
+    const hit = cache.turns[t.index];
+    if (hit && hit.hash === turnHash(t)) out.set(t.index, hit.note);
+  }
+  return out;
+}
+
 /** Notes for `turns` of one session, from the cache where possible. Turns Gemini skips get no note. */
 export async function sessionMap(cwd: string, sessionId: string, turns: Turn[], opts: MapOptions): Promise<MapResult> {
   const cache = readMapCache(cwd, sessionId);

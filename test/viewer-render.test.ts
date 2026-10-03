@@ -182,7 +182,7 @@ test('thinking is hidden behind a page toggle', () => {
 });
 
 test('render layer is pure: no Node APIs, only pure imports', () => {
-  for (const f of ['render.ts', 'html.ts', 'markdown.ts', 'diff.ts', 'styles.ts', 'client.ts', 'mock.ts', 'types.ts']) {
+  for (const f of ['render.ts', 'pr.ts', 'html.ts', 'markdown.ts', 'diff.ts', 'styles.ts', 'client.ts', 'mock.ts', 'types.ts']) {
     const src = readFileSync(join(ROOT, 'src/viewer', f), 'utf8');
     assert.doesNotMatch(src, /from 'node:|require\(|process\./, f);
     for (const m of src.matchAll(/^(?:import|export)\b[^;]*?\bfrom '([^']+)'/gm)) assert.ok(m[1]!.startsWith('./') || m[1] === '../core/types.ts' || m[1] === '../core/diff.ts', `${f} imports ${m[1]}`);
