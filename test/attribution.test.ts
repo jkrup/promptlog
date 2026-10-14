@@ -155,3 +155,22 @@ test('a short line alone in its hunk is matched together with the lines around i
   gitc(repo, 'commit', '-qam', 'phase');
   assert.deepEqual(credits(attribute(repo, diffOf(repo, base, 'HEAD'), [asSession(t)])), { '+AgentPhase,': '1:conversation' });
 });
+
+test('a turn that started after the head commit gets no credit: the code was already written', () => {
+  const repo = tempRepo();
+  writeFileSync(join(repo, 'a.js'), 'start\n');
+  gitc(repo, 'add', '.');
+  gitc(repo, 'commit', '-qm', 'base');
+  const base = gitc(repo, 'rev-parse', 'HEAD').trim();
+  writeFileSync(join(repo, 'a.js'), 'start\nconst later = "the same line, written again a day later";\n');
+  gitc(repo, 'commit', '-qam', 'work');
+  // A later session (in another worktree, say) writes the same line again; its turn starts after the commit.
+  const t = new Transcript();
+  t.human('rewrite it');
+  t.toolResult(t.toolUse('Write', { file_path: '/r/a.js', content: 'start\nconst later = "the same line, written again a day later";\n' }), 'ok');
+  const s = asSession(t);
+  const at = s.turns[0]!.timestamp!;
+  const diff = diffOf(repo, base, 'HEAD');
+  assert.deepEqual(credits(attribute(repo, diff, [s], { until: at })), { '+const later = "the same line, written again a day later";': '1:conversation' }, 'started at the commit time: counts');
+  assert.deepEqual(credits(attribute(repo, diff, [s], { until: new Date(Date.parse(at) - 1000).toISOString() })), { '+const later = "the same line, written again a day later";': '-' });
+});
