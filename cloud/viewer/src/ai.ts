@@ -55,7 +55,7 @@ export async function handleAi(req: Request, env: AiEnv, key: string): Promise<R
 }
 
 /** Jev's /v1/systemone shape in and out; Clef is API-compatible, so mostly a pass-through. */
-async function clef(env: AiEnv, body: Record<string, unknown>): Promise<unknown> {
+export async function clef(env: AiEnv, body: Record<string, unknown>): Promise<unknown> {
   const model = CLEF_MODELS[String(body.model ?? '')] ?? DEFAULT_CLEF;
   const raw = (await env.AI.run(model, { state: body.state, questions: body.questions })) as Record<string, unknown>;
   const res = (raw && typeof raw === 'object' && 'result' in raw ? raw.result : raw) as Record<string, unknown>;

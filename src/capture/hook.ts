@@ -8,7 +8,7 @@ import { isHumanPrompt, parseEntry } from '../core/transcript.ts';
 import { forkParent, type ForkMarkerReader } from './fork.ts';
 import { repoRedactor } from './redact.ts';
 import { startMirror } from './mirror.ts';
-import { claim, refusalMessage, release, renew, toolTargets } from './leases.ts';
+import { claim, claimEdit, editClaims, headsUpMessage, refusalMessage, release, renew } from './leases.ts';
 import { readCaptureState, withSessionLock, writeCaptureState, type CaptureState, type SubagentRecord } from './state.ts';
 
 export interface HookPayload {
@@ -98,11 +98,12 @@ function handleLocked(event: string, payload: HookPayload, ctx: Ctx, opts: HookO
         const headAfter = headSha(root);
         const committed = !!state.pending && !!headAfter && state.pending.headBefore !== headAfter;
         const stateAfter = snapshot();
-        // Every file this turn changed is claimed, even if the edit-time check couldn't see it (unusual Bash).
+        // Every file this turn changed is claimed, even if the edit-time check couldn't see it (unusual Bash). Files the
+        // session already holds blocks of keep just those blocks, so other agents can still work in the rest.
         const before = state.pending?.stateBefore;
         if (before && stateAfter && before !== stateAfter) {
           const changed = diffTrees(root, before, stateAfter).map((f) => f.path);
-          if (changed.length) leaseSafe(root, event, () => claim(root, holderOf(root, sessionId, state), changed, { force: true }));
+          if (changed.length) leaseSafe(root, event, () => claim(root, holderOf(root, sessionId, state), changed, { force: true, keepBlocks: true }));
         }
         const res = capture(ctx, state, event, opts, { pending: state.pending, stateAfter, headAfter, endedAt: now });
         if (res) {
@@ -268,27 +269,33 @@ function leaseSafe(root: string, event: string, fn: () => unknown): void {
   }
 }
 
-/** Hook output that tells Claude Code to refuse a tool call, with the reason the agent will read. */
-export interface PreToolUseOutput {
-  hookSpecificOutput: { hookEventName: 'PreToolUse'; permissionDecision: 'deny'; permissionDecisionReason: string };
-}
+/**
+ * Hook output for Claude Code. A refusal: the tool call doesn't run, and the agent reads the reason. A heads-up: the
+ * call goes through the user's usual permission rules (no `permissionDecision`, so nothing is auto-approved), and the
+ * agent reads the context before the tool runs.
+ */
+export type PreToolUseOutput =
+  | { hookSpecificOutput: { hookEventName: 'PreToolUse'; permissionDecision: 'deny'; permissionDecisionReason: string } }
+  | { hookSpecificOutput: { hookEventName: 'PreToolUse'; additionalContext: string } };
 
 /**
- * PreToolUse (Edit/Write/MultiEdit/NotebookEdit/Bash): claim the files the call is about to change, or refuse the call
- * when another live agent session holds one of them. Never throws; returns null to let the call through.
+ * PreToolUse (Edit/Write/MultiEdit/NotebookEdit/Bash): claim what the call is about to change (the blocks an Edit lands
+ * in, else whole files), or refuse the call when another live agent session holds it. A gray-zone edit Clef lets
+ * through comes with a heads-up. Never throws; returns null to let the call through silently.
  */
-export function preToolUse(payload: HookPayload): PreToolUseOutput | null {
+export async function preToolUse(payload: HookPayload): Promise<PreToolUseOutput | null> {
   if (process.env.PL_LEASES === 'off') return null;
   const cwd = payload.cwd ?? process.cwd();
   try {
     if (!existsSync(cwd) || !payload.session_id || !isValidSessionId(payload.session_id) || !payload.tool_name) return null;
     const root = repoRoot(cwd);
     if (!root) return null;
-    const targets = toolTargets(root, cwd, payload.tool_name, payload.tool_input);
-    if (!targets.length) return null;
-    const { refused } = claim(root, holderOf(root, payload.session_id, readCaptureState(root, payload.session_id)), targets);
-    if (!refused.length) return null;
-    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refusalMessage(refused) } };
+    const req = editClaims(root, cwd, payload.tool_name, payload.tool_input);
+    if (!req.paths.length && !req.blocks?.length) return null;
+    const r = await claimEdit(root, holderOf(root, payload.session_id, readCaptureState(root, payload.session_id)), req);
+    if (r.refused.length) return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refusalMessage(r.refused) } };
+    if (r.headsUp?.length) return { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: headsUpMessage(r.headsUp) } };
+    return null;
   } catch (err) {
     logHookError(cwd, 'PreToolUse', err);
     return null;

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { basename } from 'node:path';
-import { leaseTtlMs, listLeases } from '../capture/leases.ts';
+import { leaseTtlMs, listTable } from '../capture/leases.ts';
 import { gitMaybe } from '../core/git.ts';
 import { assembleReview, parseRange } from '../core/review.ts';
 import type { AskResult, Review, ReviewSummary } from '../core/types.ts';
@@ -226,7 +226,8 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
     }
 
     if (method === 'GET' && path === '/leases') {
-      return send(res, 200, 'text/html', renderLeasesPage({ repo: basename(cwd), leases: listLeases(cwd), now: Date.now(), ttlMin: Math.round(leaseTtlMs() / 60_000) }));
+      const { leases, decisions } = listTable(cwd);
+      return send(res, 200, 'text/html', renderLeasesPage({ repo: basename(cwd), leases, decisions, now: Date.now(), ttlMin: Math.round(leaseTtlMs() / 60_000) }));
     }
 
     if (method === 'GET' && path === '/review') {

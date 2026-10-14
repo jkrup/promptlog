@@ -1,15 +1,19 @@
-// Leases: two agent sessions on one repo, editing the same file.
+// Leases: two agent sessions on one repo, editing the same file (whole files, and blocks of one file).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bashWriteTargets, claim, listLeases, release, toolTargets } from '../src/capture/leases.ts';
+import type { Judge } from '../src/capture/lease-judge.ts';
+import { bashWriteTargets, claim, claimEdit, editClaims, headsUpMessage, listLeases, listTable, release, toolTargets, type Holder } from '../src/capture/leases.ts';
 import { tempRepo } from './helpers.ts';
 import { gitc, leaseServer, pl, Session } from './capture-helpers.ts';
 
 const A = { sessionId: 'aaaaaaaa-0000-4000-8000-000000000001', branch: 'feature/rates', ask: 'add a cache to getRates' };
 const B = { sessionId: 'bbbbbbbb-0000-4000-8000-000000000002', branch: 'feature/health' };
+
+// No real decision model in tests (the config files already point at a temp folder, see helpers.ts).
+delete process.env.TYPESAFE_API_KEY;
 
 test('the second session to touch a file is refused and told who holds it', () => {
   const repo = tempRepo();
@@ -167,4 +171,151 @@ test('a shared table that hangs or refuses the key: the agent waits at most the 
   } finally {
     srv.stop();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Blocks: two agents in one file
+// ---------------------------------------------------------------------------
+
+const SERVER = `import express from 'express';
+
+const app = express();
+
+export function getRates(cur) {
+  return RATES[cur];
+}
+export function formatRates(rates) {
+  return rates.map(String).join(', ');
+}
+
+export function health() {
+  return { ok: true };
+}
+
+export function parseCurrency(s) {
+  return s.trim().toUpperCase();
+}
+
+app.listen(3000);
+`;
+
+/** A repo with src/server.js. */
+function serverRepo(repo = tempRepo()): string {
+  mkdirSync(join(repo, 'src'), { recursive: true });
+  writeFileSync(join(repo, 'src/server.js'), SERVER);
+  return repo;
+}
+
+/** What the agent's turn was asked (the hook reads it from the session's capture state). */
+const asked = (repo: string, sid: string, prompt: string) =>
+  pl(repo, ['hook', 'UserPromptSubmit'], JSON.stringify({ session_id: sid, cwd: repo, hook_event_name: 'UserPromptSubmit', transcript_path: '/dev/null', prompt }));
+
+/** Claude Code's PreToolUse call for an Edit of src/server.js. Returns the parsed hook output (null: let through silently). */
+function editHook(repo: string, sid: string, old: string): { out: Record<string, any> | null; ms: number } {
+  const t0 = Date.now();
+  const r = pl(repo, ['hook', 'PreToolUse'], JSON.stringify({ session_id: sid, cwd: repo, hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: join(repo, 'src/server.js'), old_string: old, new_string: `${old} // changed` } }));
+  assert.equal(r.status, 0);
+  return { out: r.stdout ? JSON.parse(r.stdout) : null, ms: Date.now() - t0 };
+}
+
+test('which blocks an Edit or MultiEdit claims; anything we cannot place claims the whole file', () => {
+  const repo = serverRepo();
+  const c = editClaims(repo, repo, 'MultiEdit', { file_path: join(repo, 'src/server.js'), edits: [{ old_string: 'return RATES[cur];', new_string: 'x' }, { old_string: 'return s.trim()', new_string: 'y' }] });
+  assert.deepEqual(c.paths, []);
+  assert.deepEqual(c.blocks!.map((b) => b.block.name), ['getRates()', 'parseCurrency()']);
+  assert.deepEqual(c.blocks![0]!.change, { old: 'return RATES[cur];', new: 'x' });
+  assert.equal(c.texts!['src/server.js'], SERVER);
+  assert.deepEqual(editClaims(repo, repo, 'Edit', { file_path: join(repo, 'src/server.js'), old_string: 'export function', new_string: 'function', replace_all: true }).blocks!.length, 4);
+  assert.deepEqual(editClaims(repo, repo, 'Edit', { file_path: join(repo, 'src/server.js'), old_string: 'not there', new_string: 'x' }), { paths: ['src/server.js'] });
+  assert.deepEqual(editClaims(repo, repo, 'Edit', { file_path: join(repo, 'src/new.js'), old_string: '', new_string: 'x' }), { paths: ['src/new.js'] });
+  assert.deepEqual(editClaims(repo, repo, 'Write', { file_path: join(repo, 'src/server.js'), content: 'x' }), { paths: ['src/server.js'] });
+});
+
+test('PreToolUse hook, two worktrees: different functions both proceed; the same function is refused with its name; neighbours without Clef wait', () => {
+  const a = serverRepo();
+  gitc(a, 'add', '-A');
+  gitc(a, 'commit', '-qm', 'server');
+  const b = join(realpathSync(mkdtempSync(join(tmpdir(), 'pl-wt-'))), 'b');
+  gitc(a, 'worktree', 'add', '-q', '-b', 'feature/format', b);
+  asked(a, A.sessionId, 'add a cache to getRates');
+  asked(b, B.sessionId, 'parse currency codes case-insensitively');
+
+  assert.equal(editHook(a, A.sessionId, 'return RATES[cur];').out, null, 'A takes getRates()');
+  assert.equal(editHook(b, B.sessionId, 'return s.trim()').out, null, 'B takes parseCurrency() in the same file');
+  const same = editHook(b, B.sessionId, 'return RATES[cur];').out!;
+  assert.equal(same.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(same.hookSpecificOutput.permissionDecisionReason, /another agent is working on this code right now/);
+  assert.match(same.hookSpecificOutput.permissionDecisionReason, /- getRates\(\) in src\/server\.js \(lines 5-7 in your copy\): held by another agent session \(aaaaaaaa\) on branch main/);
+  assert.match(same.hookSpecificOutput.permissionDecisionReason, /working on: "add a cache to getRates"/);
+  assert.match(same.hookSpecificOutput.permissionDecisionReason, /Other functions in this file are free/);
+  // formatRates() sits right under getRates(): a gray zone. No decision model on this machine: the safe default.
+  const near = editHook(b, B.sessionId, 'return rates.map').out!;
+  assert.equal(near.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(near.hookSpecificOutput.permissionDecisionReason, /You wanted formatRates\(\)\. No verdict on getRates\(\) and formatRates\(\) \(no decision model is set up on this machine\) → the second agent waited, to be safe\./);
+  const listed = pl(b, ['leases']).stdout;
+  assert.match(listed, /session aaaaaaaa on main, active 0 min ago: "add a cache to getRates"\n  src\/server\.js: getRates\(\)/);
+  assert.match(listed, /session bbbbbbbb on feature\/format.*\n  src\/server\.js: parseCurrency\(\)/);
+  assert.match(listed, /recent decisions:\n  No verdict on getRates\(\) and formatRates\(\)/);
+  // A Write of the whole file is refused while anyone holds a block of it.
+  const write = pl(b, ['hook', 'PreToolUse'], JSON.stringify({ session_id: B.sessionId, cwd: b, tool_name: 'Write', tool_input: { file_path: join(b, 'src/server.js'), content: '' } }));
+  assert.match(JSON.parse(write.stdout).hookSpecificOutput.permissionDecisionReason, /getRates\(\) in src\/server\.js/);
+});
+
+test('the local decision model judges the gray zone when one is set up (here a fake one)', async () => {
+  const repo = serverRepo();
+  const take = (h: Holder, old: string, judge: Judge | null) => claimEdit(repo, h, editClaims(repo, repo, 'Edit', { file_path: join(repo, 'src/server.js'), old_string: old, new_string: 'x' }), { judge });
+  await take(A, 'return RATES[cur];', null);
+  const judge: Judge = async () => ({ model: 'jev-latest', answers: { verdict: { type: 'choice', choice: 'independent', probabilities: { independent: 0.91, conflicting: 0.05, unsure: 0.04 } } } });
+  const r = await take(B, 'return rates.map', judge);
+  assert.deepEqual(r.claimed, ['src/server.js']);
+  assert.match(headsUpMessage(r.headsUp!), /^promptlog lease heads-up: another agent session \(aaaaaaaa\) on branch feature\/rates is working on getRates\(\) in src\/server\.js, right next to formatRates\(\), which you are editing \(their task: "add a cache to getRates"\)\. jev-latest judged the two changes independent \(91%\), so your edit goes ahead\./);
+  assert.equal(listTable(repo).decisions[0]!.model, 'jev-latest');
+});
+
+test('the shared table asks Clef: independent -> allowed with a heads-up; conflicting or too slow -> refused with the verdict', async () => {
+  const log = join(realpathSync(mkdtempSync(join(tmpdir(), 'pl-clef-'))), 'clef.jsonl');
+  const run = async (clef: string[], fn: (m1: string, m2: string) => void) => {
+    const srv = await leaseServer('k3y', ...clef);
+    try {
+      const m1 = serverRepo(machine(srv.url, 'k3y'));
+      const m2 = serverRepo(machine(srv.url, 'k3y'));
+      asked(m1, A.sessionId, 'add a cache to getRates');
+      asked(m2, B.sessionId, 'format rates with two decimals');
+      assert.equal(editHook(m1, A.sessionId, 'return RATES[cur];').out, null);
+      fn(m1, m2);
+      assert.equal(errorsLog(m1) + errorsLog(m2), '');
+    } finally {
+      srv.stop();
+    }
+  };
+
+  await run(['--clef', 'independent:0.84', '--log', log], (m1, m2) => {
+    const { out } = editHook(m2, B.sessionId, 'return rates.map');
+    // Let through with a heads-up: no permissionDecision, so the user's own permission rules still apply.
+    assert.deepEqual(Object.keys(out!.hookSpecificOutput), ['hookEventName', 'additionalContext']);
+    assert.match(out!.hookSpecificOutput.additionalContext, /heads-up: another agent session \(aaaaaaaa\) on branch main in .* is working on getRates\(\) in src\/server\.js, right next to formatRates\(\)/);
+    assert.match(out!.hookSpecificOutput.additionalContext, /Clef judged the two changes independent \(84%\), so your edit goes ahead/);
+    assert.match(pl(m1, ['leases']).stdout, /recent decisions:\n  Clef: getRates\(\) and formatRates\(\) are independent \(84%\) → both agents kept working \(src\/server\.js, 0 min ago\)/);
+    // What Clef got: both asks, both blocks' code, the edit. Small.
+    const reqs = readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(reqs.length, 1);
+    assert.equal(reqs[0].state.agent_a.asked_to, 'add a cache to getRates');
+    assert.equal(reqs[0].state.agent_b.asked_to, 'format rates with two decimals');
+    assert.equal(reqs[0].state.agent_a.code, 'export function getRates(cur) {\n  return RATES[cur];\n}');
+    assert.match(reqs[0].state.agent_b.code, /^export function formatRates\(rates\)/);
+    assert.ok(JSON.stringify(reqs[0]).length < 3000);
+  });
+
+  await run(['--clef', 'conflicting:0.8'], (_m1, m2) => {
+    const { out } = editHook(m2, B.sessionId, 'return rates.map');
+    assert.equal(out!.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(out!.hookSpecificOutput.permissionDecisionReason, /getRates\(\) in src\/server\.js .*held by another agent session \(aaaaaaaa\)/);
+    assert.match(out!.hookSpecificOutput.permissionDecisionReason, /You wanted formatRates\(\)\. Clef: getRates\(\) and formatRates\(\) conflict \(80%\) → the second agent waited\./);
+  });
+
+  await run(['--clef', 'hang', '--budget', '300'], (_m1, m2) => {
+    const { out, ms } = editHook(m2, B.sessionId, 'return rates.map');
+    assert.match(out!.hookSpecificOutput.permissionDecisionReason, /No verdict on getRates\(\) and formatRates\(\) \(Clef took longer than 0\.3 s\)/);
+    assert.ok(ms < 3000, `the hook took ${ms} ms`);
+  });
 });

@@ -1,11 +1,15 @@
-// Leases: many agents on one repo at once, without editing the same file at the same time.
+// Leases: many agents on one repo at once, without editing the same code at the same time.
 //
 // When an agent session is about to change a file (Claude Code's PreToolUse hook on Edit/Write/MultiEdit, and Bash
-// commands that write files), it claims a lease on that file. If another live session holds it, the edit is refused and
-// the agent is told who holds it: their branch, what they were asked, how long ago they were active. Leases are
-// renewed by activity, expire after a quiet spell (default 15 min), and are released when the session ends or by hand.
-// The end of each turn also claims every file the turn changed (snapshot diff), so edits the PreToolUse check could not
-// see (unusual Bash) still count.
+// commands that write files), it claims a lease. An Edit claims just the block it lands in (the function, class member
+// or declaration around it; blocks.ts), so agents can work on different functions of one file at once. Write, Bash and
+// NotebookEdit claim the whole file. If another live session holds the same block (or the whole file), the edit is
+// refused and the agent is told who holds it: their branch, what they were asked, how long ago they were active.
+// Neighbouring blocks, and a block its holder left quiet, are a gray zone that Clef judges (lease-judge.ts): an edit it
+// calls independent goes ahead with a heads-up to the agent; anything else is refused. Leases are renewed by activity,
+// expire after a quiet spell (default 15 min), and are released when the session ends or by hand. The end of each turn
+// also claims every file the turn changed that the session held nothing in (snapshot diff), so edits the PreToolUse
+// check could not see (unusual Bash) still count.
 //
 // The table lives in <git-common-dir>/promptlog/leases.json, shared by every worktree of the repo, behind a lock file.
 // Agents on different machines share one table on Cloudflare instead (a Durable Object per repo, cloud/viewer), when
@@ -18,14 +22,38 @@ import { platform } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { gitMaybe } from '../core/git.ts';
 import { localDir } from '../core/store.ts';
-import { claimIn, freshestFirst, prune, releaseIn, renewIn, type ClaimResult, type Holder, type Lease, type LeaseOp } from './lease-table.ts';
+import { loadQuickConfig } from '../quick/config.ts';
+import { blocksFor, describeBlock, editRanges, outline } from './blocks.ts';
+import { claimJudged, JUDGE_BUDGET_MS, type Judge, type TableStore } from './lease-judge.ts';
+import {
+  claimIn,
+  describeDecision,
+  freshestFirst,
+  judgeName,
+  MAX_TEXT,
+  prune,
+  releaseIn,
+  renewIn,
+  type BlockClaim,
+  type ClaimRequest,
+  type ClaimResult,
+  type Decision,
+  type HeadsUp,
+  type Holder,
+  type Lease,
+  type LeaseOp,
+  type Refusal,
+  type Table,
+} from './lease-table.ts';
 import { withLock } from './state.ts';
 
-export type { Holder, Lease } from './lease-table.ts';
+export type { Decision, Holder, Lease } from './lease-table.ts';
 
 interface LeaseFile {
   version: 1;
   leases: Lease[];
+  /** Clef's verdicts on gray-zone edits, oldest first (the last 50). */
+  decisions?: Decision[];
 }
 
 export function leaseTtlMs(): number {
@@ -62,44 +90,128 @@ function write(file: string, v: LeaseFile): void {
 }
 
 /** Run `fn` on the local lease table (expired leases dropped), under the lock; saves what `fn` leaves. */
-function update<T>(root: string, fn: (leases: Lease[], now: number) => T): T | null {
+function update<T>(root: string, fn: (t: Table, now: number) => T): T | null {
   const p = leasePaths(root);
   if (!p) return null;
   return withLock(p.lock, () => {
     const now = Date.now();
     const v = read(p.file);
-    prune(v.leases, now, leaseTtlMs());
-    const out = fn(v.leases, now);
-    write(p.file, v);
+    const t: Table = { leases: v.leases, decisions: v.decisions ?? [] };
+    prune(t.leases, now, leaseTtlMs());
+    const out = fn(t, now);
+    write(p.file, { version: 1, leases: t.leases, ...(t.decisions.length ? { decisions: t.decisions } : {}) });
     return out;
   }, { timeoutMs: 5_000 });
 }
 
-/** Current leases, freshest first. */
-export function listLeases(root: string): Lease[] {
+/** Current leases, freshest first, and Clef's recent verdicts, newest first. */
+export function listTable(root: string): Table {
   const r = remote(root, { op: 'list' }, isLeaseList);
-  if (r) return r.leases;
+  if (r) return { leases: r.leases, decisions: r.decisions ?? [] };
   const p = leasePaths(root);
-  if (!p || !existsSync(p.file)) return [];
-  const leases = read(p.file).leases;
-  prune(leases, Date.now(), leaseTtlMs());
-  return freshestFirst(leases);
+  if (!p || !existsSync(p.file)) return { leases: [], decisions: [] };
+  const v = read(p.file);
+  prune(v.leases, Date.now(), leaseTtlMs());
+  return { leases: freshestFirst(v.leases), decisions: [...(v.decisions ?? [])].reverse() };
 }
 
+/** Current leases, freshest first. */
+export const listLeases = (root: string): Lease[] => listTable(root).leases;
+
 /**
- * Claim `paths` for `holder`. Paths another live session holds are refused and returned; the rest are claimed (or
- * renewed). With `force`, take them anyway (the end of a turn: the change already happened, record it).
+ * Claim whole files for `holder`. Paths another live session holds (any part of) are refused and returned; the rest are
+ * claimed (or renewed). With `force`, take them anyway (the end of a turn: the change already happened, record it);
+ * with `keepBlocks` too, files the session already holds blocks of are only renewed.
  */
-export function claim(root: string, holder: Holder, paths: string[], opts: { force?: boolean } = {}): ClaimResult {
-  const r = remote(root, { op: 'claim', holder, paths, ...(opts.force ? { force: true } : {}) }, isClaimResult);
+export function claim(root: string, holder: Holder, paths: string[], opts: { force?: boolean; keepBlocks?: boolean } = {}): ClaimResult {
+  const r = remote(root, { op: 'claim', holder, paths, ...(opts.force ? { force: true } : {}), ...(opts.keepBlocks ? { keepBlocks: true } : {}) }, isClaimResult);
   if (r) return r;
-  return update(root, (leases, now) => claimIn(leases, holder, paths, now, opts)) ?? { refused: [], claimed: [] };
+  return update(root, (t, now) => claimIn(t, holder, { paths }, now, opts)) ?? { refused: [], claimed: [] };
+}
+
+/** The whole PreToolUse check (shared table call, or local claim plus Clef) stays under this. */
+const EDIT_BUDGET_MS = 2700;
+
+/** The local table as claimJudged sees it. */
+const localStore = (root: string): TableStore => ({
+  update: async (fn) => {
+    const out = update(root, fn);
+    if (out === null) throw new Error('no lease table here');
+    return out;
+  },
+});
+
+/**
+ * Claim what an edit is about to change: blocks (asking Clef about gray-zone cases) and whole files. With a shared
+ * table, the Worker asks Clef; locally, the decision endpoint from the config files does (none: the safe default).
+ * Bounded: the whole call takes at most about EDIT_BUDGET_MS.
+ */
+export async function claimEdit(root: string, holder: Holder, req: ClaimRequest, opts: { judge?: Judge | null } = {}): Promise<ClaimResult> {
+  const t0 = Date.now();
+  const op: LeaseOp = { op: 'claim', holder, ...req };
+  const r = remote(root, op, isClaimResult, req.blocks?.length ? Math.min(EDIT_BUDGET_MS - 100, timeoutMs() + 1100) : undefined);
+  if (r) return r;
+  if (!req.blocks?.length) return update(root, (t, now) => claimIn(t, holder, req, now)) ?? { refused: [], claimed: [] };
+  const judge = opts.judge !== undefined ? opts.judge : localJudge(root);
+  const budgetMs = Math.min(JUDGE_BUDGET_MS, EDIT_BUDGET_MS - (Date.now() - t0) - 200);
+  return claimJudged(localStore(root), holder, req, { judge, budgetMs, noJudge: 'no decision model is set up on this machine' });
+}
+
+/** The decision endpoint from the config files (Jev-shaped, e.g. Dopp or TypeSafe), or null when none is set up. */
+function localJudge(root: string): Judge | null {
+  if (process.env.PL_LEASE_JUDGE === 'off') return null;
+  try {
+    const d = loadQuickConfig(root).decision;
+    if (!d?.apiKey && !process.env.TYPESAFE_API_KEY?.trim()) return null;
+  } catch {
+    return null;
+  }
+  return async (req, signal) => {
+    const { decisionClient } = await import('../quick/jev.ts');
+    const jev = decisionClient(root, { retries: 0, timeoutMs: JUDGE_BUDGET_MS, fetch: (url, init) => fetch(url, { ...init, signal }) });
+    return jev(req);
+  };
+}
+
+const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s);
+
+/**
+ * What a tool call is about to change, as a claim. Edit and MultiEdit: the blocks their old strings land in (plus the
+ * file's text, so the table can find other agents' blocks in it). Anything else, or an edit we can't place: whole files.
+ */
+export function editClaims(root: string, cwd: string, tool: string, input: Record<string, unknown> | undefined): ClaimRequest {
+  const paths = toolTargets(root, cwd, tool, input);
+  if ((tool !== 'Edit' && tool !== 'MultiEdit') || paths.length !== 1 || !input) return { paths };
+  const path = paths[0]!;
+  let text: string;
+  try {
+    const abs = join(root, path);
+    if (statSync(abs).size > MAX_TEXT) return { paths };
+    text = readFileSync(abs, 'utf8');
+  } catch {
+    return { paths }; // a new file
+  }
+  const edits = (tool === 'Edit' ? [input] : Array.isArray(input.edits) ? input.edits : []) as Record<string, unknown>[];
+  const out = outline(path, text);
+  const blocks: BlockClaim[] = [];
+  for (const e of edits) {
+    const old = typeof e.old_string === 'string' ? e.old_string : '';
+    const ranges = editRanges(text, old, e.replace_all === true);
+    if (!ranges || ranges.length > 5) return { paths };
+    const change = { old: clip(old, 600), new: clip(typeof e.new_string === 'string' ? e.new_string : '', 600) };
+    for (const r of ranges) {
+      for (const block of blocksFor(path, text, r.start, r.end, out)) {
+        if (!blocks.some((b) => b.block.start === block.start && b.block.end === block.end)) blocks.push({ path, block, change });
+      }
+    }
+  }
+  return blocks.length ? { paths: [], blocks, texts: { [path]: text } } : { paths };
 }
 
 /** Keep a session's leases alive while it works, even on turns that touch nothing new. */
 export function renew(root: string, sessionId: string): void {
   if (remote(root, { op: 'renew', sessionId }, hasCount('renewed'))) return;
-  update(root, (leases, now) => renewIn(leases, sessionId, now));
+  update(root, (t, now) => renewIn(t.leases, sessionId, now));
 }
 
 /**
@@ -110,7 +222,7 @@ export function release(root: string, sessionId: string | null, paths?: string[]
   const r = remote(root, { op: 'release', sessionId, ...(paths ? { paths } : {}) }, hasCount('released'));
   const file = leasePaths(root)?.file;
   if (r && !(file && existsSync(file))) return r.released;
-  return (r?.released ?? 0) + (update(root, (leases) => releaseIn(leases, sessionId, paths)) ?? 0);
+  return (r?.released ?? 0) + (update(root, (t) => releaseIn(t.leases, sessionId, paths)) ?? 0);
 }
 
 const isClaimResult = (v: unknown): v is ClaimResult => Array.isArray((v as ClaimResult).refused) && Array.isArray((v as ClaimResult).claimed);
@@ -183,10 +295,9 @@ export function useSharedLeases(root: string, url: string, key: string): 'keycha
 }
 
 /** One call to the shared table, synchronously, within the timeout. Never throws. */
-function callShared<T>(root: string, url: string, op: LeaseOp, ok: (v: unknown) => v is T): { value: T } | { error: string } {
+function callShared<T>(root: string, url: string, op: LeaseOp, ok: (v: unknown) => v is T, ms = timeoutMs()): { value: T } | { error: string } {
   const key = sharedLeasesKey(root, url);
   if (!key) return { error: 'no key (run `promptlog connect --leases <url> --leases-key <key>` again)' };
-  const ms = timeoutMs();
   const input = JSON.stringify({ url: `${url.replace(/\/+$/, '')}/${op.op}`, key, body: op, ms: Math.max(100, ms - 300) });
   const res = spawnSync(process.execPath, ['-e', HTTP_CHILD], { input, encoding: 'utf8', timeout: ms, killSignal: 'SIGKILL' });
   if (res.status !== 0) return { error: res.error ? res.error.message : (res.stderr || `exit ${res.status ?? res.signal}`).trim().slice(0, 300) };
@@ -198,7 +309,7 @@ function callShared<T>(root: string, url: string, op: LeaseOp, ok: (v: unknown) 
   }
 }
 
-const isLeaseList = (v: unknown): v is { leases: Lease[] } => Array.isArray((v as { leases?: unknown }).leases);
+const isLeaseList = (v: unknown): v is { leases: Lease[]; decisions?: Decision[] } => Array.isArray((v as { leases?: unknown }).leases);
 
 /** Check the shared table works (for `promptlog connect`): its current leases, or what went wrong. */
 export function checkSharedLeases(root: string): { leases: Lease[] } | { error: string } {
@@ -209,7 +320,7 @@ export function checkSharedLeases(root: string): { leases: Lease[] } | { error: 
 }
 
 /** Run `op` on the shared table. Null when there is none, or on any failure (logged), so the caller uses the local one. */
-function remote<T>(root: string, op: LeaseOp, ok: (v: unknown) => v is T): T | null {
+function remote<T>(root: string, op: LeaseOp, ok: (v: unknown) => v is T, ms?: number): T | null {
   const url = sharedLeasesUrl(root);
   if (!url) return null;
   const p = leasePaths(root);
@@ -219,7 +330,7 @@ function remote<T>(root: string, op: LeaseOp, ok: (v: unknown) => v is T): T | n
   } catch {
     // marker vanished: try the shared table
   }
-  const r = callShared(root, url, op, ok);
+  const r = callShared(root, url, op, ok, ms);
   if ('value' in r) {
     if (down) rmSync(down, { force: true });
     return r.value;
@@ -302,15 +413,38 @@ const ago = (iso: string) => {
   return m < 1 ? 'just now' : `${m} min ago`;
 };
 
-/** What the refused agent reads: who holds the file and what they're doing, and its options. */
-export function refusalMessage(refused: Lease[]): string {
-  const lines = refused.map((l) => {
-    const who = [l.branch ? `on branch ${l.branch}` : '', l.worktree ? `in ${l.worktree}` : ''].filter(Boolean).join(' ');
-    return `- ${l.path}: held by another agent session (${l.sessionId.slice(0, 8)}) ${who}, active ${ago(l.renewedAt)}${l.ask ? `, working on: "${l.ask}"` : ''}`;
+const holderText = (l: Lease) => {
+  const where = [l.branch ? `on branch ${l.branch}` : '', l.worktree ? `in ${l.worktree}` : ''].filter(Boolean).join(' ');
+  return `another agent session (${l.sessionId.slice(0, 8)})${where ? ` ${where}` : ''}`;
+};
+
+/** What the refused agent reads: who holds the code and what they're doing, Clef's verdict if it was asked, and its options. */
+export function refusalMessage(refused: Refusal[]): string {
+  const lines = refused.flatMap((l) => {
+    const what = l.block ? `${describeBlock(l.block)} in ${l.path} (lines ${l.block.start}-${l.block.end} in your copy)` : l.path;
+    const line = `- ${what}: held by ${holderText(l)}, active ${ago(l.renewedAt)}${l.ask ? `, working on: "${l.ask}"` : ''}`;
+    return l.decision ? [line, `  ${l.wanted ? `You wanted ${describeBlock(l.wanted)}. ` : ''}${describeDecision(l.decision)}.`] : [line];
   });
+  const blocks = refused.some((l) => l.block);
   return [
-    'promptlog lease: another agent is working on this file right now, so this edit was not made.',
+    `promptlog lease: another agent is working on this ${blocks ? 'code' : 'file'} right now, so this edit was not made.`,
     ...lines,
-    'Work on something else first, or coordinate with that session (for example, send it a message). Leases end when that session ends or after 15 minutes without activity. A person can free it with `promptlog leases release <path>`.',
+    `${blocks ? 'Other functions in this file are free. ' : ''}Work on something else first, or coordinate with that session (for example, send it a message). Leases end when that session ends or after 15 minutes without activity. A person can free it with \`promptlog leases release <path>\`.`,
   ].join('\n');
+}
+
+/** What an agent reads when Clef let its edit through next to another agent's work. */
+export function headsUpMessage(notes: HeadsUp[]): string {
+  return notes
+    .map(({ lease: l, wanted, decision: d }) => {
+      const theirs = describeBlock(l.block!);
+      const mine = describeBlock(wanted);
+      const p = Math.round((d.probabilities?.independent ?? 0) * 100);
+      const where =
+        d.why === 'near'
+          ? `${holderText(l)} is working on ${theirs} in ${l.path}, right next to ${mine}, which you are editing${l.ask ? ` (their task: "${l.ask}")` : ''}.`
+          : `${holderText(l)} edited ${theirs} in ${l.path} a while ago and is still active${l.ask ? ` (their task: "${l.ask}")` : ''}.`;
+      return `promptlog lease heads-up: ${where} ${judgeName(d)} judged the two changes independent (${p}%), so your edit goes ahead. Leave their part to them; if you need to change it, coordinate with that session first.`;
+    })
+    .join('\n');
 }

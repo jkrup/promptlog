@@ -14,8 +14,9 @@ export async function run(args: string[]): Promise<number> {
     payload = JSON.parse((await readStdin()) || '{}') as HookPayload;
     const ev = event || payload.hook_event_name || '';
     if (ev === 'PreToolUse') {
-      // The only event that answers back: a lease refusal, which Claude Code shows the agent instead of running the tool.
-      const out = preToolUse(payload);
+      // The only event that answers back: a lease refusal (Claude Code shows the agent the reason instead of running the
+      // tool), or a heads-up when Clef let an edit through next to another agent's work.
+      const out = await preToolUse(payload);
       if (out) process.stdout.write(JSON.stringify(out));
       return 0;
     }
