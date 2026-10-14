@@ -136,8 +136,11 @@ export default {
     for (const h of ['x-artifacts-remote', 'x-artifacts-token', 'x-ai-base', 'x-ai-key']) headers.delete(h);
     headers.set('x-artifacts-remote', remote);
     headers.set('x-artifacts-token', token);
-    // A public repo's container never gets the AI key, so nobody can spend AI through it (not even with the key).
-    if (!isPublic(env, name)) {
+    // A public repo's container gets the AI key only to write its own summaries (the overview and per-turn notes, read
+    // with GET). Its content is fixed and those results are cached, so a visitor can't spend more than one write each.
+    // Asks (POST) stay refused above, and /__ai/* needs the key.
+    const summaryRead = req.method === 'GET' && (url.pathname === '/api/overview' || url.pathname === '/api/glance');
+    if (!isPublic(env, name) || summaryRead) {
       headers.set('x-ai-base', `${url.origin}/__ai`);
       headers.set('x-ai-key', await aiKey(env.VIEW_KEY));
     }
