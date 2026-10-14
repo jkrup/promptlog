@@ -244,6 +244,9 @@ describe('viewer server', () => {
       glanceCalls.push(input.items.map((i) => i.sessionId).join(','));
       return { ...basicGlance(input), headline: 'Gemini <b>headline</b>', source: 'gemini', model: 'gemini-fake' } satisfies Glance;
     },
+    async buildOverview() {
+      throw new Error('not used here (test/overview.test.ts)');
+    },
     async quickAsk({ question, target }) {
       asked.push({ question, target });
       return { sessionId: A, turn: 2, question, answer: `Quick answer to <i>${question}</i>`, askedAt: '2026-09-27T01:00:00Z' };

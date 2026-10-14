@@ -87,7 +87,12 @@ export function assembleReview(cwd: string, base: string, head: string): Review 
     .filter((s): s is Session => !!s);
   const linked = new Set(all.filter((s) => trailerTurns.has(s.meta.sessionId) || s.turns.some((t) => t.meta?.commits?.some((c) => inRange.has(c)))).map((s) => s.meta.sessionId));
   const since = gitMaybe(['show', '-s', '--format=%cI', mergeBase], { cwd });
-  const attribution = attribute(cwd, rangeDiff(cwd, mergeBase, head), all, { prefer: linked, ...(since ? { since: new Date(since).toISOString() } : {}) });
+  const until = gitMaybe(['show', '-s', '--format=%cI', `${head}^{commit}`], { cwd });
+  const attribution = attribute(cwd, rangeDiff(cwd, mergeBase, head), all, {
+    prefer: linked,
+    ...(since ? { since: new Date(since).toISOString() } : {}),
+    ...(until ? { until: new Date(until).toISOString() } : {}),
+  });
   const work = new Map<string, number[]>();
   const workLines = new Map<string, number>();
   for (const t of attribution.turns.values()) {

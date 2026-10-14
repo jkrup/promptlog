@@ -13,7 +13,8 @@ import { toHtml } from './html.ts';
 import { renderLeasesPage } from './leases-page.ts';
 import { loadAsk, loadQuick, loadSummarize, type AskModule, type Loaded, type QuickModule, type SummarizeModule } from './integrations.ts';
 import { mockSummary } from './mock.ts';
-import { buildIndexModel, buildPrModel, buildReviewModel, buildSessionModel, displayTitle, isSafeRev, isSafeSessionId, resolveSession, turnDiff, turnRaw } from './model.ts';
+import { buildIndexModel, buildPrModel, buildReviewModel, buildSessionModel, displayTitle, isSafeRev, isSafeSessionId, overviewInput, resolveSession, turnDiff, turnRaw } from './model.ts';
+import { overviewKey, type Overview } from '../quick/overview.ts';
 import {
   PAGE_SCRIPTS,
   renderAskResult,
@@ -31,7 +32,7 @@ import {
   renderSummaryUnavailable,
   reviewUrl,
 } from './render.ts';
-import { renderPrPage } from './pr.ts';
+import { renderOverview, renderPrPage } from './pr.ts';
 import type { FeatureState, Features } from './types.ts';
 
 export interface ViewerModules {
@@ -168,6 +169,7 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
     };
   };
   const glances = new Map<string, Promise<unknown>>();
+  const overviews = new Map<string, Promise<Overview>>();
 
   const pastAsks = async (ask: Loaded<AskModule>, sessionIds: string[]): Promise<Map<string, AskResult[]>> => {
     const out = new Map<string, AskResult[]>();
@@ -229,7 +231,38 @@ export function createViewerServer(opts: ServerOptions): { server: Server; setPo
 
     if (method === 'GET' && path === '/review') {
       const { base, head } = reviewRange(url);
-      return send(res, 200, 'text/html', renderPrPage(buildPrModel(cwd, base, head, loadReview(base, head))));
+      const model = buildPrModel(cwd, base, head, loadReview(base, head));
+      // Not written yet: the page asks for it after it loads, when there's a text model to write it.
+      if (model.overview && !model.overview.data) {
+        const f = await features();
+        if (f.quick.ok && f.features.glance?.available) model.overview.src = `/api/overview?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`;
+        else model.overview.off = f.features.glance?.available === false ? f.features.glance.reason : 'the quick-ask module is not installed';
+      }
+      return send(res, 200, 'text/html', renderPrPage(model));
+    }
+
+    if (method === 'GET' && path === '/api/overview') {
+      const f = await features();
+      if (!f.quick.ok || !f.features.glance?.available) return sendJson(res, 501, { ok: false, error: f.features.glance?.available === false ? f.features.glance.reason : 'unavailable' });
+      const { base, head } = reviewRange(url);
+      const review = loadReview(base, head);
+      const model = buildPrModel(cwd, base, head, review);
+      const input = overviewInput(cwd, review, model.title);
+      if (!input || !model.overview) return sendJson(res, 404, { ok: false, error: 'no turn wrote any of these lines' });
+      const q = f.quick.mod;
+      const key = overviewKey(input);
+      let p = overviews.get(key);
+      if (!p) {
+        p = q.buildOverview(cwd, input, { gemini: q.repoGeminiClient(cwd) });
+        overviews.set(key, p);
+        p.catch(() => overviews.delete(key));
+      }
+      try {
+        model.overview.data = await p;
+        return sendJson(res, 200, { ok: true, html: toHtml(renderOverview(model)) });
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
     }
 
     if (method === 'GET' && path === '/review-old') {

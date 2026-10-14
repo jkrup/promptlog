@@ -3,6 +3,7 @@ export { quickAsk, pickTurns, verdictFor, directVerdict, answerQuestions, THRESH
 export { sessionMap, mapInput, parseNotes, mapCachePath, MAP_VERSION, MAP_SYSTEM, MAP_SCHEMA, type MapOptions, type MapResult } from './map.ts';
 export { resolveScope, isSessionTarget, sessionCode, type Scope } from './scope.ts';
 export { buildGlance, basicGlance, diffSpots, diffWindow, displayPrompt, glancePrompt, parseBeyond, GLANCE_VERSION, type BeyondItem, type Glance, type GlanceFile, type GlanceInput, type GlanceTurn, type Spot } from './glance.ts';
+export { buildOverview, cachedOverview, findVerbatim, overviewCachePath, overviewKey, overviewPrompt, overviewTurns, verifyOverview, OVERVIEW_SCHEMA, OVERVIEW_SYSTEM, OVERVIEW_VERSION, type BuildOverviewOptions, type FileCredit, type Overview, type OverviewChange, type OverviewInput, type OverviewQuote } from './overview.ts';
 export { grepAt, pickPatterns, renderSearch, sanitizePatterns, type SearchPattern, type SearchResult } from './codesearch.ts';
 export { addedLines, findLeftovers, removedNames, type Leftover } from './leftovers.ts';
 export { jevClient, decisionClient, noul, JEV_MODEL, JEV_URL, JEV_USD_PER_MTOK, type Jev, type JevRequest, type JevResponse, type JevAnswer, type JevQuestion } from './jev.ts';

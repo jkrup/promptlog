@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { AskResult, Review, ReviewSummary } from '../core/types.ts';
 import type { Gemini } from '../quick/gemini.ts';
 import type { Glance, GlanceInput } from '../quick/glance.ts';
+import type { Overview, OverviewInput } from '../quick/overview.ts';
 
 export interface AskModule {
   ask(opts: { cwd: string; sessionId: string; turn: number; question: string; model?: string }): Promise<AskResult>;
@@ -44,6 +45,8 @@ export interface QuickModule {
   repoGeminiClient(cwd: string): Gemini;
   decisionClient(cwd: string): unknown;
   buildGlance(cwd: string, input: GlanceInput, opts: { gemini: Gemini }): Promise<Glance>;
+  /** "What changed, and why" for the PR page (one text-model call, verified, cached). */
+  buildOverview(cwd: string, input: OverviewInput, opts: { gemini: Gemini }): Promise<Overview>;
   quickAsk(opts: { cwd: string; question: string; target?: string }): Promise<AskResult>;
 }
 

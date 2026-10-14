@@ -92,9 +92,10 @@ function snapshotLines(cwd: string, t: Turn): Set<string> {
 /**
  * Credit every changed line of `diffText` to a turn of `sessions`. Sessions in `prefer` (e.g. linked to the PR's
  * commits) win over others when both contain a line. `since` (ISO time, e.g. the PR's base commit) leaves out turns
- * of other sessions whose last activity is older: their code was already in the base.
+ * of other sessions whose last activity is older: their code was already in the base. `until` (ISO time, the PR's head
+ * commit) leaves out turns that started later: the code was already written.
  */
-export function attribute(cwd: string, diffText: string, sessions: Session[], opts: { prefer?: Set<string>; since?: string } = {}): Attribution {
+export function attribute(cwd: string, diffText: string, sessions: Session[], opts: { prefer?: Set<string>; since?: string; until?: string } = {}): Attribution {
   const files = parseDiff(diffText);
   const credit = new Map<string, Credit | null>();
   const turns = new Map<string, TurnCredit>();
@@ -105,7 +106,9 @@ export function attribute(cwd: string, diffText: string, sessions: Session[], op
   const refs: TurnRef[] = sessions
     .flatMap((s) => s.turns.map((t) => ({ sessionId: s.meta.sessionId, turn: t, at: t.timestamp ?? t.meta?.startedAt ?? '' })))
     // Sessions tied to the range's commits always count; other sessions only if they were active after the base.
-    .filter((r) => !opts.since || opts.prefer?.has(r.sessionId) || lastActivity(r.turn) >= opts.since);
+    .filter((r) => !opts.since || opts.prefer?.has(r.sessionId) || lastActivity(r.turn) >= opts.since)
+    // A turn that started after `until` (the range's head commit) can't have written lines that commit already had.
+    .filter((r) => !opts.until || !r.at || r.at <= opts.until);
   refs.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const tiers = opts.prefer?.size ? [refs.filter((r) => opts.prefer!.has(r.sessionId)), refs.filter((r) => !opts.prefer!.has(r.sessionId))] : [refs];
 
