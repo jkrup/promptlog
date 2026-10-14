@@ -19,12 +19,15 @@ const CLEF_MODELS: Record<string, string> = {
 };
 const DEFAULT_CLEF = '@cf/cloudflare/clef-flash';
 
-/** The key the container uses for /__ai/*: HMAC(VIEW_KEY, "ai-proxy"), so there's no second secret to manage. */
-export async function aiKey(viewKey: string): Promise<string> {
+/** A key for one purpose, HMAC(VIEW_KEY, purpose), so there's no second secret to manage. */
+export async function derivedKey(viewKey: string, purpose: string): Promise<string> {
   const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(viewKey), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode('ai-proxy')));
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(purpose)));
   return [...sig].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/** The key the container uses for /__ai/*. */
+export const aiKey = (viewKey: string) => derivedKey(viewKey, 'ai-proxy');
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
