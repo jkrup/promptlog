@@ -1,0 +1,9 @@
+{
+  "name": "promptlog-demo",
+  "private": true,
+  "type": "module",
+  "description": "Builds the promptlog contest demo video",
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

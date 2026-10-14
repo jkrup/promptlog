@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><title>close</title><link rel="stylesheet" href="base.css">
+<style>
+.c { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 120px 60px; }
+.big { font-size: 92px; letter-spacing: -3px; }
+.big::before { width: 16px; }
+.sub { margin-top: 20px; font-size: 34px; font-weight: 600; letter-spacing: -.5px; }
+.sub em { font-style: normal; color: var(--accent2); }
+.rows { margin-top: 40px; display: grid; grid-template-columns: 210px 1fr; row-gap: 12px; font-size: 21px; }
+.rows .k { color: var(--muted); }
+.rows .v { font-family: var(--mono); font-size: 19px; color: #e8e8e8; }
+</style></head><body>
+<div class="c">
+  <div class="brand big" data-s="0" data-d="-0.3">promptlog</div>
+  <div class="sub" data-s="0" data-d="0.2">Review the <em>conversation</em>, not just the diff.</div>
+  <div class="rows" data-s="1" data-d="-0.2">
+    <div class="k">License</div><div class="v">MIT</div>
+    <div class="k">Code</div><div class="v" id="repo"></div>
+    <div class="k">Hosted review</div><div class="v">promptlog-viewer.mazlix-f8e.workers.dev</div>
+    <div class="k">Built on</div><div class="v">Cloudflare Workers + Artifacts</div>
+  </div>
+</div>
+<script src="scene.js"></script></body></html>

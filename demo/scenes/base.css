@@ -1,0 +1,26 @@
+/* Shared look for the demo's own scenes. Canvas: 1280x720 CSS px (rendered at 1.5x = 1920x1080). */
+:root {
+  --bg: #0f1116; --bg2: #161922; --card: #1b1f2a; --line: #2a2f3c; --text: #f3f2ee; --muted: #a3a6b1; --faint: #6d7180;
+  --accent: #f26b2a; --accent2: #ff9a5c; --blue: #7aa2ff; --green: #5fd38d; --red: #ff7b7b; --agent: #e07ad0;
+  --sans: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; --mono: "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1280px; height: 720px; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--sans); }
+body { background: radial-gradient(1200px 700px at 70% -10%, #1d2230 0%, var(--bg) 60%); }
+.stage { position: absolute; inset: 0; padding: 56px 72px; }
+.brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: -.5px; }
+.brand::before { content: ""; width: 10px; height: 1em; background: var(--accent); border-radius: 2px; display: inline-block; }
+.kicker { color: var(--accent2); font-size: 16px; font-weight: 650; letter-spacing: 1.6px; text-transform: uppercase; }
+h1 { font-size: 46px; line-height: 1.1; letter-spacing: -1px; font-weight: 750; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.term { background: #0b0c10; border: 1px solid #2b2f3a; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.45); overflow: hidden; }
+.term .bar { height: 34px; background: #1a1d25; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid #262a34; }
+.term .bar i { width: 12px; height: 12px; border-radius: 50%; background: #3a3e4a; display: block; }
+.term .bar i:nth-child(1) { background: #ff5f57; } .term .bar i:nth-child(2) { background: #febc2e; } .term .bar i:nth-child(3) { background: #28c840; }
+.term .bar span { margin-left: 10px; color: var(--faint); font-size: 13px; font-family: var(--mono); }
+.term pre { font-family: var(--mono); font-size: 17px; line-height: 1.6; padding: 18px 22px; white-space: pre-wrap; word-break: break-word; color: #e6e6e6; }
+.term .ps { color: var(--green); } .term .cmd { color: #fff; font-weight: 600; }
+.caret { display: inline-block; width: 9px; height: 1.1em; background: #e6e6e6; vertical-align: text-bottom; margin-left: 1px; }
+.pill { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 650; }

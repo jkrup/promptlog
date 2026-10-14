@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>leases</title><link rel="stylesheet" href="base.css">
+<style>
+.head { position: absolute; left: 72px; top: 36px; }
+.head h1 { margin-top: 6px; font-size: 38px; }
+.agents { position: absolute; left: 72px; right: 72px; top: 136px; display: flex; gap: 18px; }
+.ag { flex: 1; padding: 12px 16px; }
+.ag .n { font-size: 18px; font-weight: 700; }
+.ag .n span { font-family: var(--mono); font-size: 14px; color: var(--muted); font-weight: 500; margin-left: 8px; }
+.ag .a { font-size: 15.5px; color: #d9dbe1; margin-top: 4px; }
+.ev { margin-top: 8px; display: flex; gap: 10px; flex-wrap: wrap; }
+.ev .pill { font-family: var(--mono); font-size: 13.5px; font-weight: 600; }
+.ok { background: rgba(95,211,141,.14); color: var(--green); }
+.no { background: rgba(255,123,123,.14); color: var(--red); }
+.term { position: absolute; left: 72px; right: 72px; }
+.term pre { font-size: 14.5px; line-height: 1.5; padding: 12px 18px; }
+#t1 { top: 282px; } #t2 { top: 282px; }
+.hl { color: #ffd2b8; }
+</style></head><body>
+<div class="head"><div class="kicker" data-s="0" data-d="-0.3">New &middot; many agents, one repo</div><h1 data-s="0" data-d="-0.2">No collisions: leases</h1></div>
+<div class="agents">
+  <div class="ag card" data-s="1"><div class="n">Agent A<span>feature/rates</span></div><div class="a">asked: &ldquo;add a per-currency cache to getRates&rdquo;</div>
+    <div class="ev"><span class="pill ok" data-s="1" data-d="2.0">Edit src/server.js &middot; allowed, lease taken</span></div></div>
+  <div class="ag card" data-s="2"><div class="n">Agent B<span>feature/health, another worktree</span></div><div class="a">asked: &ldquo;add a /health endpoint that reports cache status&rdquo;</div>
+    <div class="ev"><span class="pill no" data-s="2" data-d="1.4">Edit src/server.js &middot; refused</span><span class="pill ok" data-s="3" data-d="0.2">Edit src/health.js &middot; allowed</span></div></div>
+</div>
+<div class="term" id="t1" data-s="2" data-d="2.2" data-out="4" data-od="0"><div class="bar"><i></i><i></i><i></i><span>what agent B&rsquo;s Claude Code reads (PreToolUse hook, deny)</span></div><pre id="deny"></pre></div>
+<div class="term" id="t2" data-s="4" data-d="0.15"><div class="bar"><i></i><i></i><i></i><span>rates-api-health</span></div><pre><span class="ps">rates-api-health $ </span><span class="cmd">promptlog leases</span>
+<span id="leases"></span></pre></div>
+<script src="scene.js"></script></body></html>

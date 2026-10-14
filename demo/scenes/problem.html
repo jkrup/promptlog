@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>problem</title><link rel="stylesheet" href="base.css">
+<style>
+.list { position: absolute; left: 96px; top: 64px; width: 1090px; }
+.row { display: flex; align-items: baseline; gap: 22px; margin-bottom: 26px; }
+.row .n { font-family: var(--mono); color: var(--accent2); font-size: 20px; width: 30px; flex: none; }
+.row .t { font-size: 40px; font-weight: 700; letter-spacing: -.8px; line-height: 1.15; }
+.row .s { font-size: 21px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+.end { position: absolute; left: 96px; right: 96px; bottom: 112px; padding: 26px 32px; border-left: 6px solid var(--accent); background: rgba(242,107,42,.08); border-radius: 6px; }
+.end .a { font-size: 34px; font-weight: 700; letter-spacing: -.6px; line-height: 1.25; }
+.end .a b { color: var(--accent2); }
+</style></head><body>
+<div class="list">
+  <div class="row" data-s="0" data-out="4" data-dimto=".35"><div class="n">01</div><div><div class="t">Agents write most of the code now.</div></div></div>
+  <div class="row" data-s="1" data-out="4" data-dimto=".35"><div class="n">02</div><div><div class="t">Review still means reading the diff.</div><div class="s">The output, line by line.</div></div></div>
+  <div class="row" data-s="2" data-out="4" data-dimto=".35"><div class="n">03</div><div><div class="t">The reasons are in the conversation.</div><div class="s">What was asked &middot; what the agent tried &middot; where the person pushed back &middot; what never got tested</div></div></div>
+  <div class="row" data-s="3" data-out="4" data-dimto=".35"><div class="n">04</div><div><div class="t">And agents now message each other.</div><div class="s">One finds a bug and reports it. Another fixes it. A diff can&rsquo;t show that.</div></div></div>
+</div>
+<div class="end" data-s="4"><div class="a">Code is the compiled output. <b>The prompts and the conversation are the source.</b> Review that.</div></div>
+<script src="scene.js"></script></body></html>

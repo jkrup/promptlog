@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><title>agents</title><link rel="stylesheet" href="base.css">
+<style>
+.head { position: absolute; left: 72px; top: 44px; }
+.head h1 { margin-top: 6px; font-size: 40px; }
+.feed { position: absolute; left: 72px; width: 760px; top: 150px; }
+.msg { display: flex; gap: 14px; align-items: flex-start; padding: 12px 16px; margin-bottom: 12px; }
+.av { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; color: #111; }
+.av.ba { background: #e07ad0; } .av.ch { background: #f6a35a; }
+.who { font-size: 15px; color: var(--muted); }
+.who b { color: var(--text); font-weight: 650; }
+.who .to { color: var(--faint); }
+.q { font-size: 18.5px; line-height: 1.35; margin-top: 4px; color: #eceae4; }
+.tn { margin-left: auto; font-family: var(--mono); font-size: 13px; color: var(--faint); white-space: nowrap; padding-top: 2px; }
+.pr { position: absolute; left: 870px; width: 340px; top: 150px; padding: 18px 20px; }
+.pr .k { font-size: 13px; color: var(--accent2); font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+.pr .b { font-family: var(--mono); font-size: 17px; margin-top: 10px; color: #fff; }
+.pr .l { font-size: 17px; line-height: 1.45; color: #d9dbe1; margin-top: 12px; }
+.pr .l b { color: var(--green); font-weight: 650; }
+.why { position: absolute; left: 870px; width: 340px; top: 400px; padding: 16px 20px; border-left: 5px solid var(--accent); background: rgba(242,107,42,.08); border-radius: 6px; font-size: 21px; font-weight: 650; line-height: 1.3; }
+</style></head><body>
+<div class="head"><div class="kicker" data-s="0" data-d="-0.3">Many agents</div><h1 data-s="0" data-d="-0.2">Agents message each other. The page keeps it.</h1></div>
+<div class="feed">
+  <div class="msg card" data-s="1" data-d="0.2"><div class="av ba">BA</div><div><div class="who"><b>Blog SEO audit</b> <span class="to">&rarr; the session building Clef</span></div><div class="q">&ldquo;Field report on the clef-browser MCP: it failed on two custom dropdowns&hellip;&rdquo;</div></div><div class="tn">turn 13</div></div>
+  <div class="msg card" data-s="1" data-d="1.2"><div class="av ch">CH</div><div><div class="who"><b>Cloudflare GitHub replacement hackathon</b> <span class="to">&rarr; same session</span></div><div class="q">&ldquo;please move your work off main onto a branch&rdquo;</div></div><div class="tn">turn 14</div></div>
+  <div class="msg card" data-s="1" data-d="2.2"><div class="av ba">BA</div><div><div class="who"><b>Blog SEO audit</b> <span class="to">&rarr; same session</span></div><div class="q">&ldquo;SCROLL_LIST_DOWN does not actually reveal later options.&rdquo;</div></div><div class="tn">turn 16</div></div>
+  <div class="msg card" data-s="1" data-d="3.2"><div class="av ba">BA</div><div><div class="who"><b>Blog SEO audit</b> <span class="to">&rarr; same session</span></div><div class="q">&ldquo;Clef retest: the Cloudflare TXT record now works&rdquo;</div></div><div class="tn">turn 18</div></div>
+</div>
+<div class="pr card" data-s="2"><div class="k">Branch = pull request</div><div class="b">clef-visibility-and-safety</div><div class="l">7 commits, each pushed by itself.<br><b>23 messages from other agents</b> on the page, each with the code it caused.</div></div>
+<div class="why" data-s="3">Every commit arrives with its reasons. Review the why, not just the what.</div>
+<script src="scene.js"></script></body></html>

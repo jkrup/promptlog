@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><title>title</title><link rel="stylesheet" href="base.css">
+<style>
+.c { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 120px; }
+.big { font-size: 104px; letter-spacing: -3px; }
+.big::before { width: 18px; }
+.sub { margin-top: 26px; font-size: 38px; line-height: 1.25; font-weight: 600; letter-spacing: -.6px; max-width: 980px; }
+.sub em { font-style: normal; color: var(--accent2); }
+.foot { position: absolute; left: 120px; bottom: 70px; font-size: 19px; color: var(--muted); }
+</style></head><body>
+<div class="c">
+  <div class="brand big" data-s="0" data-d="-0.4">promptlog</div>
+  <div class="sub" data-s="0" data-d="0.3">Review the <em>conversation</em> that built the code,<br>not just the diff.</div>
+</div>
+<div class="foot" data-s="0" data-d="0.9">For Cloudflare&rsquo;s &ldquo;Build the next GitHub&rdquo; &middot; runs on Workers + Artifacts</div>
+<script src="scene.js"></script></body></html>

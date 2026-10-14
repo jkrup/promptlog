@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><title>arch</title><link rel="stylesheet" href="base.css">
+<style>
+.head { position: absolute; left: 60px; top: 40px; }
+.head h1 { margin-top: 6px; font-size: 40px; }
+.box { position: absolute; background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.box .t { font-size: 19px; font-weight: 700; letter-spacing: -.2px; }
+.box .s { font-size: 14.5px; color: var(--muted); line-height: 1.3; margin-top: 3px; }
+.box.cf { border-color: #f6821f; background: #241a14; }
+.box.cf .t::after { content: "Cloudflare"; margin-left: 8px; font-size: 11px; font-weight: 700; color: #f6a35a; letter-spacing: .8px; text-transform: uppercase; vertical-align: 2px; }
+.box.ses .t { font-size: 17px; }
+svg { position: absolute; inset: 0; width: 1280px; height: 720px; }
+svg path { fill: none; stroke: #8b90a0; stroke-width: 2.2; }
+svg path.hot { stroke: var(--accent2); }
+svg path.dash { stroke-dasharray: 6 6; }
+.lbl { position: absolute; font-size: 13.5px; color: #c9ccd4; background: var(--bg); padding: 1px 6px; border-radius: 4px; }
+.url { font-family: var(--mono); font-size: 13px !important; color: #d7d9df !important; }
+</style></head><body>
+<div class="head"><div class="kicker" data-s="0" data-d="-0.3">On Cloudflare</div><h1 data-s="0" data-d="-0.2">How it runs</h1></div>
+<svg>
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b90a0" stroke="none"/></marker>
+  <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ff9a5c" stroke="none"/></marker></defs>
+  <path data-draw data-s="1" data-d="0.3" d="M290 213 C 330 213, 330 285, 368 292" marker-end="url(#ah)"/>
+  <path data-draw data-s="1" data-d="0.4" d="M290 293 L 368 296" marker-end="url(#ah)"/>
+  <path data-draw data-s="1" data-d="0.5" d="M290 373 C 330 373, 330 305, 368 300" marker-end="url(#ah)"/>
+  <path class="hot" data-draw data-s="1" data-d="2.2" data-dur="0.8" d="M562 298 L 628 298" marker-end="url(#ah2)"/>
+  <path data-draw data-s="2" data-d="0.2" d="M882 262 C 920 262, 920 200, 958 200" marker-end="url(#ah)"/>
+  <path data-draw data-s="2" data-d="1.4" d="M1090 232 L 1090 276" marker-end="url(#ah)"/>
+  <path data-draw data-s="3" data-d="0.9" d="M1090 352 L 1090 396" marker-end="url(#ah)"/>
+  <path class="dash" data-draw data-s="3" data-d="1.8" data-dur="0.9" d="M958 430 C 900 430, 900 350, 884 336" marker-end="url(#ah)"/>
+  <path data-draw data-s="3" data-d="0.3" d="M958 316 C 920 316, 900 495, 884 495" marker-end="url(#ah)"/>
+  <path data-draw data-s="4" data-d="0.3" d="M1090 478 L 1090 510" marker-end="url(#ah)"/>
+</svg>
+<div class="box ses" style="left:60px;top:182px;width:230px;height:62px" data-s="1"><div class="t">Claude Code session</div><div class="s">you + Claude</div></div>
+<div class="box ses" style="left:60px;top:262px;width:230px;height:62px" data-s="1" data-d="0.1"><div class="t">Claude Code session</div><div class="s">another agent</div></div>
+<div class="box ses" style="left:60px;top:342px;width:230px;height:62px" data-s="1" data-d="0.2"><div class="t">Claude Code session</div><div class="s">another agent</div></div>
+<div class="box" style="left:370px;top:250px;width:192px;height:96px" data-s="1" data-d="1.2"><div class="t">git commit</div><div class="s">hooks attach each turn&rsquo;s conversation</div></div>
+<div class="lbl" style="left:560px;top:268px" data-s="1" data-d="2.6">push</div>
+<div class="box cf" style="left:630px;top:216px;width:252px;height:164px" data-s="1" data-d="2.4"><div class="t">Artifacts</div><div class="s">A private git repo per folder.<br>Branches are PRs.<br>Every turn&rsquo;s conversation rides along with the code.</div></div>
+<div class="box cf" style="left:960px;top:168px;width:260px;height:64px" data-s="2" data-d="0.6"><div class="t">Queue</div><div class="s">push events</div></div>
+<div class="box cf" style="left:960px;top:278px;width:260px;height:74px" data-s="3"><div class="t">Worker</div><div class="s">serves the review page</div></div>
+<div class="box cf" style="left:960px;top:398px;width:260px;height:80px" data-s="3" data-d="0.6"><div class="t">Containers</div><div class="s">the promptlog viewer, no API keys inside</div></div>
+<div class="lbl" style="left:886px;top:372px" data-s="3" data-d="2.4">reads the repo</div>
+<div class="box cf" style="left:960px;top:512px;width:260px;height:84px" data-s="4"><div class="t">Workers AI</div><div class="s">DeepSeek writes the text<br>Clef-flash makes decisions</div></div>
+<div class="box" style="left:630px;top:452px;width:252px;height:86px" data-s="3" data-d="0.4"><div class="t">Review page</div><div class="s url">promptlog-viewer.mazlix-f8e.workers.dev</div></div>
+<script src="scene.js"></script></body></html>
