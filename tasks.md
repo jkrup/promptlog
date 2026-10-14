@@ -114,6 +114,7 @@ Follow-ups:
 - [ ] `/ask @turn14 …` PR comment trigger runs M3 in CI (needs a Claude token secret)
 
 ### Backlog (noticed along the way)
+- [ ] **Safety:** the `--auto-push` pre-push hook runs `promptlog push` on every push, so pushing to a new or public remote also publishes `refs/promptlog/sessions/*` (full transcripts). Add a per-remote opt-in (allowlist in `.promptlog/`), and refuse or warn when the remote is new or public. Found by the browser-use launch session, 2026-10-03.
 - [ ] `git log --all` shows promptlog capture commits. Document `git log --all --exclude='refs/promptlog/*'` or set `log.excludeDecoration`; consider fewer commits (the Stop and SessionEnd of the same turn both commit today)
 - [ ] Getting code off the cloud container: ship `promptlog.bundle` checkpoints to the user (no remote yet)
 - [ ] Fixture with a subagent + `/compact` + a human edit between turns

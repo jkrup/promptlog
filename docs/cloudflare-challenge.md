@@ -24,6 +24,77 @@ Git repos hosted by Cloudflare. They're made for creating lots of them automatic
 - Every push can fire a `pushed` event (ref, before/after, commit list) into a Cloudflare Queue, and a Worker can react to it.
 - **Cost:** it requires the **Workers Paid plan ($5/month)**. That includes 10,000 operations and 1 GB of storage per month, which is plenty for this. Billing starts October 14.
 
+## Build plan (chosen 2026-10-02): review the conversation behind a team PR
+
+Mockups: `docs/concepts/` (open `index.html`). The pick is `pr.html`. The other three (`inbox`, `channel`, `lanes`) were "one person running many agents", which Claude Code mostly owns already; keep them as reference.
+
+**One line:** a teammate's PR arrives with the conversations that built it. You review the asks and decisions, comment on the line of conversation where it went wrong, and that comment becomes a prompt the author's own agent picks up at that turn.
+
+**Why it scores**
+- Originality (50%): nobody reviews the conversation. Comments on a conversation line that turn into a prompt for the author's agent, plus team rules learned from review comments, are new.
+- Multi-agent (25%): a real team is many agents at once (each teammate's sessions, each in its own Artifacts fork). PRs that collide show both conversations' reasons and a merge order. The conversation is kept with the code forever (context preservation).
+- Ease of use (25%): a phone page that leads with the ticket, a 2-sentence glance and "Decisions made in chat".
+
+**The demo (5–7 min video)**
+1. Two teammates' agents work at once: Dana's (`/rates` with caching, then tests) and Sam's (`/health` JSON). Each pushes to its own Artifacts fork every turn.
+2. Dana opens PR #12 with a ticket: "must stay consistent across our 20 instances; shared state goes in Valkey".
+3. On a phone, the reviewer sees: "Matches the ticket? Mostly. The cache is per instance." Under Decisions: "Keep the cache in memory; Redis later (Dana, turn 2)".
+4. The reviewer highlights that line of the conversation: "No, use our Valkey store so it's shared across instances." The page shows the ready prompt for Dana's agent.
+5. Dana taps Fix with agent. Her Rates session resumes with the comment, pushes, and the comment resolves itself on the reviewer's phone.
+6. "Save as team rule": Sam's agent starts its next task and already knows it.
+7. #12 and #14 collide on `/health`. The page shows both reasons and Clef's order (#12 first, 92% on the demo data). Approve, merge, Sam's agent redoes its 4-line change.
+
+**Architecture (Workers + Artifacts, no container)**
+- **Repos.** One Artifacts repo per team project, one fork per agent session or per developer. promptlog's existing hooks push the branch plus `refs/promptlog/*` to the fork after each turn (`install --auto-push`, pointed at the fork).
+- **Hub Worker** (`cloud/hub`, replaces `cloud/viewer` and its container):
+  - Queue consumer for `pushed` events records ref → SHA in D1 (custom refs can't be read by name through the binding; see the spike log), then reads the new turn through the binding.
+  - Per-turn notes and "decisions made in chat" come from DeepSeek V4 Flash on Workers AI, cached per turn in D1. These are the summary layers that already exist in `src/quick`.
+  - Clef asks only narrow questions (see below). Code turns the answers into flags.
+  - PR page: the viewer's pure render functions, fed by a new `RepoReader` that reads through the Artifacts binding instead of the `git` CLI.
+  - Comments, PRs, tickets and team rules live in D1. Workers can't write commits, so nothing here needs to.
+- **Author side (laptop).** `promptlog inbox` lists review comments on your sessions. Fix with agent delivers a comment one of two ways: if the session is live, the Claude Code Stop hook returns the comment as the next instruction; if it's finished, `claude --resume <session>` runs in its worktree with the comment and the turn it refers to. Either way the agent pushes and the page updates from the push event.
+- **Team rules.** Saved from a comment, served by the Hub, injected by a SessionStart hook as extra context, so every agent on the repo gets them. No commit needed.
+- **Conversation blame (for agents first).** Each push updates a line → turn index for the repo: the turn that wrote each line, plus the earlier turns, sessions, PRs and tickets behind it. Agents query it through a Hub endpoint (a tool call) and get short refs, not transcripts; people see the same thing by tapping a line. The context travels with the code: the next agent to touch a line reads why it is that way first.
+- **Collisions.** On each push, compare the changed hunks of open PRs against main (same file, overlapping or adjacent lines). Clef picks the order; the second PR's author agent redoes its change.
+- **Merges** run where git runs: the author's laptop or the agent itself. The Worker never writes git.
+
+**Clef: narrow questions only** (measured 2026-10-02, `docs/concepts/clef-results.json`)
+- Use: "was this chunk asked for?" with only that chunk (80% right on the startup change), merge order (92%), routing (92%), "does turn N+1 address this comment?".
+- Don't use: "is this push safe to merge?" over a whole diff. It said merge for both risky pushes. Whole-diff checks missed the startup change (6%).
+- Chunks come from line authorship: git blame over the per-turn snapshots, exact, no AI.
+- Model choice: stay on Clef (Cloudflare-native, which suits the contest). A Jev/Clef/GLiNER bake-off through Dopp is a Dopp question for later. If the small calls are flaky during the build, test 2–3 question wordings on Clef alone. (For reference: on Dopp's Banking77 bench Clef-flash got 96% vs Jev's 80%; Jev is about 2.7× faster and half the price.)
+
+**Schedule**
+
+| Day | Work | Done when |
+|---|---|---|
+| Fri Oct 3 | `cloud/hub`: Worker + D1 + Queue + Artifacts binding. `promptlog hub connect` creates the team repo and a fork for this checkout and points auto-push at it. Event subscription per fork (API call; test whether one account-level subscription covers all repos). | A turn in a local Claude Code session shows up as a D1 row within seconds. |
+| Sat Oct 4 | `RepoReader` over the Artifacts binding: the read side of `store.ts` and `review.ts`. Serve the existing review page from the Worker. | The demo PR renders on workers.dev from Artifacts, no container. |
+| Sun Oct 5 | Summary layers in the Worker: per-turn notes, glance, **Decisions made in chat** (who decided, quote, contradicts the ticket?). Ticket on the PR. Clef eval (if approved) in parallel. | The phone page leads with ticket, glance and decisions. |
+| Mon Oct 6 | Conversation view with sentence-level comments; composer builds the prompt for the author's agent; comments in D1. | A comment on "Don't build Redis now" is saved with its prompt. |
+| Tue Oct 7 | Fix with agent: `promptlog inbox`, Stop-hook delivery for live sessions, resume for finished ones; Clef "does the new turn address the comment?" resolves it. | Dana's session fixes the Valkey comment and it resolves on the phone. |
+| Wed Oct 8 | Team rules (save from a comment, SessionStart hook injects them). **Conversation blame, agent-first:** on every push the Hub records which turn wrote each line (and the earlier turns, sessions, PRs and tickets that touched it). Agents call a Hub endpoint as a tool ("why is server.js:25 like this?") and get short refs (session, turn, quote, ticket) they can drill into. "Tap a line" on the PR page and a CLI wrapper read the same data. | A new session starts with the rule in its context; an agent fixing a bug pulls the original decision from the Hub before changing the line. |
+| Thu Oct 9 | Two teammates' agents at once; collisions between open PRs; collision card with both reasons and Clef's order. | #12 and #14 collide on screen with both reasons. |
+| Fri Oct 10 | Approve and merge flow; per-chunk "was this asked?" flags; Files section; phone polish. | Full demo runs end to end once. |
+| Sat Oct 11 | Dry runs with real agents (Claude plan: ask first); fix what breaks; seed script so the demo repeats. | Two clean runs in a row. |
+| Sun Oct 12 | README run instructions, MIT `LICENSE`, redaction check of repo and fixtures. Record the video. | Video recorded. |
+| Mon Oct 13 | Buffer; re-record if needed. | |
+| Tue Oct 14 | Submit by noon PT, not at the 11:59 PM deadline. | Submitted. |
+
+**Cut first if behind:** live updates (refresh instead), auto-resolve (author marks resolved), team rules (show the saved rule only), per-chunk Clef flags, collision order (show both reasons only).
+
+**Costs:** Workers Paid (already have). Workers AI (DeepSeek + Clef-flash): cents for the whole build. Demo agents run on your Claude plan; ask before each batch. Model eval: under $1 plus GLiNER's Modal GPU time, only if approved.
+
+**Open risks**
+- Reading many files through the binding per push may be slow: cache per-turn results in D1 and read only what changed.
+- The Worker has no git, so line diffs need a small TS diff routine (zero deps).
+- Stop-hook delivery: confirm `{"decision":"block","reason":…}` makes Claude Code continue with the comment as its instruction (check on Oct 7).
+- Real agents vary run to run: script the demo prompts and keep the demo bundle as a fallback.
+
+## Earlier plan (2026-10-01, superseded by the build plan above)
+
+Kept for the research in it (leases, Clef roles, spikes). Where it disagrees with the build plan, the build plan wins.
+
 ## How promptlog fits
 
 | Judged on | promptlog today | Gap |
@@ -98,7 +169,7 @@ Two signals, used together.
 
 **Demo moment:** agent B tries to edit `getRates`, is stopped with "agent A holds this: adding per-currency cache", and moves to another function.
 
-## Timeline (13 days)
+## Timeline (13 days, superseded)
 
 | Days | Work | Done when |
 |---|---|---|
