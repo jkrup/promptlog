@@ -1,7 +1,9 @@
-// The PR page: the conversation that built a commit range, turn by turn, with the code each turn wrote under it.
-// Pure (model -> HTML). Expanders are <details>, so nothing loads in later and moves the page.
+// The PR page: what changed and why (the overview), then the conversation that built a commit range, turn by turn,
+// with the code each turn wrote under it. Pure (model -> HTML). Expanders are <details>; the only thing that loads
+// later is the written overview, into room reserved for it.
+import type { Overview, OverviewChange, OverviewQuote } from '../core/types.ts';
 import { counts, statusBadge } from './diff.ts';
-import { html, plural, type Safe } from './html.ts';
+import { html, join, plural, type Safe } from './html.ts';
 import { initials, renderPage, renderPrompt, time } from './render.ts';
 
 export interface PrLine {
@@ -63,6 +65,28 @@ export interface PrFile {
   hunks: PrFileLine[][];
 }
 
+/** Who asked for the turns that wrote the PR's lines, with how many lines. */
+export interface PrDriver {
+  who: string;
+  kind: 'person' | 'agent';
+  lines: number;
+}
+
+/** "What changed, and why" at the top of the page. */
+export interface PrOverview {
+  /** Model-free: credited lines by who asked, most first. */
+  drivers: PrDriver[];
+  credited: number;
+  /** How many changes to reserve room for while the overview is written. */
+  expect: number;
+  /** The written overview (src/quick/overview.ts), when it exists. */
+  data?: Overview;
+  /** Where the page fetches the overview from when it isn't written yet. */
+  src?: string;
+  /** Why there won't be a written overview (e.g. no text-model key). */
+  off?: string;
+}
+
 export interface PrPageModel {
   title: string;
   base: string;
@@ -73,9 +97,12 @@ export interface PrPageModel {
   files: PrFile[];
   repoName: string;
   oldHref: string;
+  /** Absent when no turn wrote any of the PR's lines. */
+  overview?: PrOverview;
 }
 
 const anchor = (sessionId: string, turn: number) => `t-${sessionId.slice(0, 8)}-${turn}`;
+const fileAnchor = (i: number) => `file-${i}`;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
 function lineRow(l: PrLine): Safe {
@@ -143,7 +170,7 @@ ${s.turns.map((t) => (t.files.length || t.fromAgent ? workTurn(t) : quietTurn(t)
 </section>`;
 }
 
-function fileView(f: PrFile): Safe {
+function fileView(f: PrFile, i: number): Safe {
   let last = '';
   const rows = (lines: PrFileLine[]) =>
     lines.map((l) => {
@@ -157,11 +184,85 @@ function fileView(f: PrFile): Safe {
       if (l.kind !== 'ctx') last = key;
       return html`${label}${lineRow(l)}`;
     });
-  return html`<details class="pr-file"><summary>${statusBadge(f.status)}<span class="pr-path">${f.path}</span>${counts(f.additions, f.deletions)}</summary>
+  return html`<details class="pr-file" id="${fileAnchor(i)}"><summary>${statusBadge(f.status)}<span class="pr-path">${f.path}</span>${counts(f.additions, f.deletions)}</summary>
 <div class="pr-code">${f.hunks.map((h, i) => {
     last = '';
     return html`${i ? html`<div class="pl-gap">⋯</div>` : ''}${rows(h)}`;
   })}</div></details>`;
+}
+
+// ---------------------------------------------------------------------------
+// What changed, and why
+// ---------------------------------------------------------------------------
+
+/** Who drove the code, in numbers: the share of traced lines written in answer to each person or agent. */
+function drivers(o: PrOverview): Safe {
+  const total = sum(o.drivers.map((d) => d.lines)) || 1;
+  const shown = o.drivers.filter((d) => d.lines / total >= 0.01);
+  const rest = o.drivers.length - shown.length;
+  const one = (d: PrDriver) =>
+    html`<b>${Math.round((100 * d.lines) / total)}%</b> answering <span class="ov-name k-${d.kind}"${d.kind === 'agent' ? html` title="Another Claude session"` : ''}>${d.who}</span>`;
+  return html`<p class="ov-drove">Who drove the code: ${join(shown.map(one), ', ')}${rest ? ` and ${plural(rest, 'other')}` : ''}<span class="muted"> · of ${o.credited.toLocaleString('en-US')} lines traced to a turn</span></p>`;
+}
+
+/** Words from the conversation, verbatim, with who said them. Markdown marks are dropped for reading. */
+function quoteView(q: OverviewQuote, lead?: Safe): Safe {
+  return html`<blockquote class="ov-q k-${q.kind}">${lead ?? ''}<span class="ov-who">${q.who}</span>${q.kind === 'agent' ? html`<span class="ov-role"> (another Claude session)</span>` : ''} <q>${q.quote.replace(/\*\*|`/g, '')}</q> <a class="ov-turn" href="#${anchor(q.sessionId, q.turn)}">turn ${q.turn}</a></blockquote>`;
+}
+
+function changeView(m: PrPageModel, c: OverviewChange): Safe {
+  const turns = m.sessions.flatMap((s) => s.turns);
+  const turnOf = (sessionId: string, n: number) => turns.find((t) => t.sessionId === sessionId && t.turn === n);
+  const color = (sessionId: string) => m.sessions.find((s) => s.sessionId === sessionId)?.color ?? 0;
+  const chips = c.turns.map((t) => html`<a class="ov-chip t c${color(t.sessionId)}" href="#${anchor(t.sessionId, t.turn)}" title="${turnOf(t.sessionId, t.turn)?.who ?? ''}">turn ${t.turn}</a>`);
+  // Files by how much of this change is in them; a name shared by two files gets its folder.
+  const base = (p: string) => p.split('/').pop()!;
+  const name = (p: string) => (c.files.filter((q) => base(q) === base(p)).length > 1 ? p.split('/').slice(-2).join('/') : base(p));
+  const files = c.files
+    .map((path) => {
+      // Lines this change's turns wrote in the file.
+      const mine = c.turns.flatMap((t) => turnOf(t.sessionId, t.turn)?.files.filter((f) => f.path === path) ?? []);
+      return { path, add: sum(mine.map((f) => f.additions)), del: sum(mine.map((f) => f.deletions)) };
+    })
+    .sort((x, y) => y.add + y.del - (x.add + x.del))
+    .map(
+      (f) =>
+        html`<a class="ov-chip f" href="#${fileAnchor(m.files.findIndex((x) => x.path === f.path))}" title="${f.path}">${name(f.path)}${f.add ? html` <span class="plus">+${f.add}</span>` : ''}${f.del ? html` <span class="minus">−${f.del}</span>` : ''}</a>`,
+    );
+  const shown = 4;
+  const tried = c.tried ? quoteView(c.tried, html`<span class="ov-res ${c.tried.result}">${c.tried.result === 'worked' ? 'Tried for real: worked' : 'Tried for real: failed'}</span> `) : '';
+  return html`<article class="ov-chg">
+<div class="ov-model"><h3>${c.title}</h3><p class="ov-what">${c.what}</p></div>
+${c.why ? quoteView(c.why) : html`<p class="ov-noq">No words in the recorded conversation ask for this.</p>`}${c.alsoWhy.map((q) => quoteView(q))}${tried}
+<div class="ov-links">${chips}${files.slice(0, shown)}${files.length > shown ? html`<details class="ov-more"><summary>${plural(files.length - shown, 'more file')}</summary><div class="ov-links">${files.slice(shown)}</div></details>` : ''}</div>
+</article>`;
+}
+
+/**
+ * The overview section. Written: a one-sentence summary and the changes. Not written yet: the same frame with room
+ * reserved for the changes, which the page fills in place from `src`. The facts above the changes need no model.
+ */
+export function renderOverview(m: PrPageModel): Safe {
+  const o = m.overview;
+  if (!o) return html``;
+  const d = o.data;
+  const legend = html`<p class="ov-legend"><span><span class="ov-key"></span>summary written by a model from the conversation</span><span><span class="ov-key solid"></span>quoted word for word, with who said it</span></p>`;
+  if (d) {
+    return html`<section id="overview" class="ov">
+<h2>What changed, and why</h2>
+${d.summary ? html`<p class="ov-sum ov-model">${d.summary}</p>` : ''}
+${drivers(o)}
+${legend}
+<div class="ov-list">${d.changes.map((c) => changeView(m, c))}</div>
+</section>`;
+  }
+  const wait = !!o.src;
+  return html`<section id="overview" class="ov"${wait ? html` data-src="${o.src}" aria-busy="true"` : ''}>
+<h2>What changed, and why</h2>
+<p class="ov-status" role="status" data-ov-status>${wait ? 'Writing the overview from the conversation. The first time takes about half a minute.' : `No written overview here: ${o.off ?? 'no text model is set up'}.`}</p>
+${drivers(o)}
+${wait ? html`${legend}<div class="ov-list ov-wait" aria-hidden="true">${Array.from({ length: o.expect }, () => html`<div class="ov-skel"><i></i><i></i><i></i><i></i></div>`)}</div>` : ''}
+</section>`;
 }
 
 export function renderPrPage(m: PrPageModel): string {
@@ -178,7 +279,8 @@ export function renderPrPage(m: PrPageModel): string {
   <p class="pr-meta">${plural(m.commits.length, 'commit')} · ${plural(m.files.length, 'file')} ${counts(adds, dels)} · ${plural(work.length, 'turn')} wrote code${agents.length ? html` · ${plural(agents.length, 'message')} from other agents` : ''}</p>
   <p class="pr-cover">${m.coverage.credited.toLocaleString('en-US')} of ${m.coverage.lines.toLocaleString('en-US')} changed lines traced to the turn that wrote them (${pct}%).</p>
 </header>
-<nav class="pr-tabs"><a href="#conversation">Conversation</a><a href="#files">Files ${m.files.length}</a><a href="${m.oldHref}" class="muted">old page</a></nav>
+<nav class="pr-tabs">${m.overview ? html`<a href="#overview">Overview</a>` : ''}<a href="#conversation">Conversation</a><a href="#files">Files ${m.files.length}</a><a href="${m.oldHref}" class="muted">old page</a></nav>
+${renderOverview(m)}
 <section id="conversation" class="pr-conv">
 ${m.sessions.length ? m.sessions.map((s) => sessionBlock(s, m.sessions.length > 1)) : html`<p class="muted">No recorded conversation wrote this code.</p>`}
 </section>

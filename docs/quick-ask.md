@@ -33,6 +33,16 @@ Session and review pages lead with:
 
 The full conversation is collapsed underneath. The page renders a model-free outline first and swaps in the Gemini version when `/api/glance` returns (a few seconds the first time, instant after). With no Gemini key the outline stays and the page says so. The long "deep review" (Claude Code, `src/summarize`) runs only when you click it.
 
+## What changed, and why (the PR page)
+
+The PR page (`/review`) opens with the PR's changes grouped by what changed, each with the words in the conversation that caused it and who said them (`src/quick/overview.ts`).
+
+- **Input.** The layer-1 notes, each turn's request and Claude's words verbatim, the lines each turn wrote in the PR (`src/core/attribution.ts`), the commit subjects and the file list. Long sessions send only the turns that wrote code and the few around them.
+- **One call** to the text model returns a summary sentence and the changes: title, what changed, the quote that caused it (turn, request or reply), later quotes that reshaped it, a "tried for real" quote when someone ran it live, the turns and the files.
+- **Checked in code.** A quote is kept only when it is in that turn's request or Claude's words (whitespace, markdown marks and curly quotes may differ; the page shows the original text). Turns and files must be in the PR. Who said it comes from the data: the person, the other session's name (`Turn.from`), or Claude. A change with nothing real to point at is dropped.
+- **Cached** in `overview-<key>.json`, keyed by the range, each session's ref commit and the prompt, so the page renders it straight from the cache. Otherwise the page shows the same frame with room reserved and the model-free facts ("who drove the code": share of traced lines by who asked), and fills it in from `/api/overview` without moving what the reader is looking at.
+- **Hosted**, the container's config points the same text client at the Worker's AI proxy, so nothing changes there.
+
 ## How a quick ask works
 
 1. **Notes.** Layer 1 above.

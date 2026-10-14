@@ -276,3 +276,46 @@ export interface Glance {
   source: 'gemini' | 'basic';
   model?: string;
 }
+
+// ---------------------------------------------------------------------------
+// PR overview: what changed, and why (src/quick/overview.ts writes it, src/viewer/pr.ts renders it)
+// ---------------------------------------------------------------------------
+
+/** Words from the conversation, verbatim, with who said them (from the data, never from the model). */
+export interface OverviewQuote {
+  sessionId: string;
+  turn: number;
+  /** 'ask': the turn's request (the person's prompt, or another session's message). 'reply': Claude's words in that turn. */
+  from: 'ask' | 'reply';
+  /** The exact text as it appears in the turn. */
+  quote: string;
+  who: string;
+  kind: 'person' | 'agent' | 'claude';
+}
+
+export interface OverviewChange {
+  /** Model-written. */
+  title: string;
+  /** Model-written: what changed, in plain words. */
+  what: string;
+  /** The words that caused the change. Absent when no quote the model gave was verbatim. */
+  why?: OverviewQuote;
+  /** Later words that reshaped it (a retest, a follow-up). */
+  alsoWhy: OverviewQuote[];
+  /** Someone ran it for real and said how it went. The result word is the model's reading of the quote. */
+  tried?: OverviewQuote & { result: 'worked' | 'failed' };
+  turns: { sessionId: string; turn: number }[];
+  files: string[];
+}
+
+export interface Overview {
+  key: string;
+  createdAt: string;
+  model: string;
+  /** Model-written: the PR in one sentence. */
+  summary: string;
+  changes: OverviewChange[];
+  /** What verification threw away. */
+  dropped: { quotes: number; turns: number; files: number; changes: number };
+  usage?: { inputTokens: number; outputTokens: number };
+}

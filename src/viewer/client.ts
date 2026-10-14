@@ -147,6 +147,39 @@ export function clientMain(): void {
     }
   };
 
+  // --- PR overview (async): fill the room reserved for it, without moving what the reader is looking at -------
+  // A reader who scrolled past the block keeps their place: browsers with scroll anchoring do that themselves;
+  // elsewhere, measure the next section before and after the swap and scroll by the difference.
+  const keepPlace = (box: HTMLElement, change: () => void) => {
+    const next = box.nextElementSibling;
+    const manual = !(window.CSS && CSS.supports('overflow-anchor', 'auto')) && box.getBoundingClientRect().bottom <= 0;
+    const before = next?.getBoundingClientRect().top ?? 0;
+    change();
+    if (manual && next) window.scrollBy(0, next.getBoundingClientRect().top - before);
+  };
+  const loadOverview = async () => {
+    const box = document.getElementById('overview');
+    if (!box?.dataset.src) return;
+    try {
+      const res = await fetch(box.dataset.src);
+      const data = (await res.json()) as { ok?: boolean; html?: string; error?: string };
+      if (!res.ok || !data.ok || !data.html) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const tpl = document.createElement('template');
+      tpl.innerHTML = data.html;
+      const fresh = tpl.content.firstElementChild;
+      if (!fresh) throw new Error('empty reply');
+      fresh.classList.add('ov-in');
+      keepPlace(box, () => box.replaceWith(fresh));
+    } catch (e) {
+      keepPlace(box, () => {
+        box.removeAttribute('aria-busy');
+        for (const el of $$('.ov-wait, .ov-legend', box)) el.remove();
+        const status = box.querySelector<HTMLElement>('[data-ov-status]');
+        if (status) status.textContent = `Couldn't write the overview: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300);
+      });
+    }
+  };
+
   // --- Summary (async) ----------------------------------------------------------------------------
   const summary = document.getElementById('summary');
   const applyAnnotations = (ann: Record<string, { badges: string; gist?: string }>) => {
@@ -285,4 +318,5 @@ export function clientMain(): void {
   // The deep review uses the reader's Claude plan, so it only runs on load when a page asks for it explicitly.
   if (summary?.dataset.autoload === '1') void loadSummary(false);
   void loadGlance();
+  void loadOverview();
 }

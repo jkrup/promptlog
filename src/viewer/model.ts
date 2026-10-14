@@ -8,9 +8,11 @@ import { isCommandPrompt } from '../core/transcript.ts';
 import type { AskResult, Review, Session, Turn } from '../core/types.ts';
 import { basicGlance, displayPrompt } from '../quick/glance.ts';
 import { cachedNotes } from '../quick/map.ts';
+import { cachedOverview, type OverviewInput } from '../quick/overview.ts';
+import { sessionCommits } from '../summarize/cache.ts';
 import { findLeftovers } from '../quick/leftovers.ts';
 import { sessionCode } from '../quick/scope.ts';
-import type { PrBlock, PrFile, PrFileLine, PrLine, PrPageModel, PrSession, PrTurn, PrTurnFile } from './pr.ts';
+import type { PrBlock, PrDriver, PrFile, PrFileLine, PrLine, PrOverview, PrPageModel, PrSession, PrTurn, PrTurnFile } from './pr.ts';
 import { anchorId as anchorFor } from './render.ts';
 import { turnKey, type BranchRow, type ExtrasMap, type Features, type IndexPageModel, type ReviewPageModel, type SessionPageModel, type SessionRow } from './types.ts';
 
@@ -341,6 +343,22 @@ export function buildPrModel(cwd: string, base: string, head: string, review: Re
 
   const branch = gitMaybe(['rev-parse', '--verify', '-q', `refs/heads/${head}`], { cwd }) ? head : '';
   const title = review.commits.length === 1 ? review.commits[0]!.subject : branch || review.commits.at(-1)?.subject || `${base}..${head}`;
+
+  // Who drove the code: credited lines by who asked for the turn that wrote them. No model involved.
+  const drivers = new Map<string, PrDriver>();
+  for (const tc of a.turns.values()) {
+    const t = review.sessions[tc.sessionId]?.turns.find((x) => x.index === tc.turn);
+    const who = t?.from ?? names.get(tc.sessionId) ?? 'you';
+    const d = drivers.get(who) ?? { who, kind: t?.from ? ('agent' as const) : ('person' as const), lines: 0 };
+    d.lines += tc.lines;
+    drivers.set(who, d);
+  }
+  // "What changed, and why": server-rendered when already written (cached), else written after the page loads.
+  const input = overviewInput(cwd, review, title);
+  const written = input ? cachedOverview(cwd, input) : null;
+  const overview: PrOverview | undefined = input
+    ? { drivers: [...drivers.values()].sort((x, y) => y.lines - x.lines), credited: a.totals.credited, expect: Math.min(6, Math.max(2, a.turns.size)), ...(written ? { data: written } : {}) }
+    : undefined;
   return {
     title,
     base,
@@ -351,6 +369,31 @@ export function buildPrModel(cwd: string, base: string, head: string, review: Re
     files,
     repoName: repoName(cwd),
     oldHref: `/review-old?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`,
+    ...(overview ? { overview } : {}),
+  };
+}
+
+/** What the overview is written from (src/quick/overview.ts), or null when no turn wrote any of the PR's lines. */
+export function overviewInput(cwd: string, review: Review, title?: string): OverviewInput | null {
+  const a = review.attribution;
+  if (!a || !a.turns.size || !review.slices.length) return null;
+  const credit = new Map<string, Map<string, { additions: number; deletions: number }>>();
+  for (const [k, tc] of a.turns) credit.set(k, tc.files);
+  const files = a.files.map((f, fi) => {
+    let untraced = 0;
+    f.hunks.forEach((h, hi) => h.lines.forEach((l, li) => (l.type === 'add' || l.type === 'del') && !a.credit.get(lineKey(fi, hi, li)) && untraced++));
+    return { path: f.status === 'D' ? f.oldPath : f.newPath, additions: f.additions, deletions: f.deletions, untraced };
+  });
+  return {
+    key: { mergeBase: review.mergeBase, head: gitMaybe(['rev-parse', '--verify', '-q', `${review.head}^{commit}`], { cwd }) ?? review.head, sessions: sessionCommits(cwd, review) },
+    items: review.slices.map((sl) => {
+      const s = review.sessions[sl.sessionId]!;
+      return { sessionId: sl.sessionId, person: s.meta.author?.name ?? 'you', turns: s.turns.filter((t) => t.index >= sl.fromTurn && t.index <= sl.toTurn) };
+    }),
+    credit,
+    files,
+    commits: review.commits.map((c) => c.subject),
+    ...(title ? { title } : {}),
   };
 }
 

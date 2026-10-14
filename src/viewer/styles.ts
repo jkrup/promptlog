@@ -595,4 +595,60 @@ form.qask button:disabled { opacity: .5; cursor: progress; }
   .pl { grid-template-columns: 30px 14px max-content; }
   .pr-by, .pl-gap { margin-left: 44px; padding-left: 0; }
 }
+
+/* ---- PR overview (pr.ts): what changed, and why. Dashed edge: model-written. Solid edge: quoted word for word. ---- */
+.ov { margin: 18px 0 30px; scroll-margin-top: 56px; }
+.ov h2 { font-size: 19px; letter-spacing: -.01em; margin: 0 0 8px; }
+.ov-model { border-left: 2px dashed var(--border-strong); padding-left: 11px; }
+.ov-sum { margin: 0 0 10px; font-size: 16.5px; line-height: 1.45; font-weight: 500; color: var(--text); }
+.ov-status { margin: 0 0 10px; font-size: 15px; line-height: 1.45; color: var(--muted); }
+.ov-drove { margin: 0 0 6px; font-size: 13.5px; color: var(--text-2); }
+.ov-drove b { font-weight: 650; color: var(--text); }
+.ov-name { font-weight: 600; }
+.ov-name.k-agent { color: var(--accent); }
+.ov-legend { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.ov-key { display: inline-block; height: 12px; border-left: 2px dashed var(--border-strong); margin-right: 6px; vertical-align: -2px; }
+.ov-key.solid { border-left: 3px solid var(--text-2); }
+.ov-list { display: grid; gap: 10px; }
+.ov-chg { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+.ov-chg h3 { margin: 0; font-size: 15.5px; line-height: 1.35; }
+.ov-what { margin: 3px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--text-2); }
+.ov-q { --qc: var(--text-2); margin: 9px 0 0; border-left: 3px solid var(--qc); padding: 1px 0 1px 11px; font-size: 14px; line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; }
+.ov-q.k-agent { --qc: var(--accent); }
+.ov-q.k-claude { --qc: var(--ai); }
+.ov-q q { color: var(--text); quotes: "“" "”"; }
+.ov-who { font-weight: 650; color: var(--qc); }
+.ov-q.k-person .ov-who { color: var(--text); }
+.ov-role { color: var(--muted); font-size: 12.5px; }
+.ov-turn { font-size: 12.5px; white-space: nowrap; }
+.ov-res { display: inline-block; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 0 7px; margin-right: 4px; }
+.ov-res.worked { background: var(--ok-bg); color: var(--ok); }
+.ov-res.failed { background: var(--bad-bg); color: var(--bad); }
+.ov-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ov-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.ov-chip:hover { text-decoration: none; border-color: var(--border-strong); }
+.ov-chip.t { color: var(--c, var(--accent)); font-weight: 600; }
+.ov-chip.f { font-family: var(--mono); font-size: 11.5px; }
+.ov-noq { margin: 9px 0 0; font-size: 13px; color: var(--muted); font-style: italic; }
+.pr-file[id^="file-"] { scroll-margin-top: 56px; }
+.ov-more { display: inline-block; }
+.ov-more[open] { flex-basis: 100%; }
+.ov-more > summary { display: inline-flex; align-items: center; min-height: 24px; padding: 0 6px; font-size: 12px; color: var(--accent); cursor: pointer; list-style: none; }
+.ov-more > summary::-webkit-details-marker { display: none; }
+.ov-more[open] > summary { display: none; }
+.ov-more > .ov-links { margin-top: 0; }
+.ov-skel { height: 220px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 14px; }
+.ov-skel i { display: block; height: 10px; border-radius: 5px; background: var(--surface-2); margin: 0 0 12px; }
+.ov-skel i:nth-child(1) { width: 34%; height: 13px; }
+.ov-skel i:nth-child(2) { width: 88%; }
+.ov-skel i:nth-child(3) { width: 72%; }
+.ov-skel i:nth-child(4) { width: 46%; margin-top: 22px; }
+.ov-in { animation: ov-in .35s ease-out; }
+@keyframes ov-in { from { opacity: .4; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ov-in { animation: none; } }
+@media (max-width: 640px) {
+  .ov-chg { padding: 11px 12px; border-radius: 10px; }
+  .ov-skel { height: 380px; }
+  .ov-sum { font-size: 16px; }
+}
 `;
