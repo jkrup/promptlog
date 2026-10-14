@@ -5,11 +5,14 @@ import { fileURLToPath } from 'node:url';
 import { repoRoot } from '../../core/git.ts';
 import { installGitHooks } from '../../capture/githooks.ts';
 
-export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'Stop', 'SubagentStop', 'SessionEnd'] as const;
+export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop', 'SubagentStop', 'SessionEnd'] as const;
+
+/** PreToolUse only runs for tools that change files: it claims leases (src/capture/leases.ts). */
+const MATCHERS: Partial<Record<(typeof HOOK_EVENTS)[number], string>> = { PreToolUse: 'Edit|Write|MultiEdit|NotebookEdit|Bash' };
 
 export function hooksConfig(plBin: string) {
   const hooks: Record<string, unknown[]> = {};
-  for (const ev of HOOK_EVENTS) hooks[ev] = [{ hooks: [{ type: 'command', command: `${plBin} hook ${ev}` }] }];
+  for (const ev of HOOK_EVENTS) hooks[ev] = [{ ...(MATCHERS[ev] ? { matcher: MATCHERS[ev] } : {}), hooks: [{ type: 'command', command: `${plBin} hook ${ev}` }] }];
   return hooks;
 }
 

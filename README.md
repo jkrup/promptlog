@@ -1,40 +1,67 @@
 # promptlog
 
-Prompt-native code review. GitHub made the code diff the thing you review. When AI writes the code in a conversation, the **conversation** is what should be reviewed. promptlog captures Claude Code sessions into git, shows the conversation behind a branch or PR, and lets you **ask questions at any turn** against that turn's exact repo state.
+**Review the conversation that built the code, not just the diff.**
 
-## Quick start (Node ≥ 22.18, git, Claude Code)
+Most code is now written by AI agents in a conversation. The diff is the compiled output; the prompts, the agent's replies and the messages between agents are the source. promptlog records that source next to the code, in git, and shows a pull request as the conversation that produced it: who asked for what (a person or another agent), what the agent did, and the exact code each turn wrote.
+
+Built for Cloudflare's "Build the next GitHub" challenge, on Cloudflare **Workers** and **Artifacts**. MIT licensed.
+
+## What it does
+
+- **One command per project.** `promptlog connect` sets up git if needed, records Claude Code sessions, creates a private Cloudflare Artifacts repo for the folder, brings in the folder's past Claude Code sessions (linked to the commits they made) and pushes. Nothing else changes in how you or your agents work.
+- **Every commit pushes itself.** When a person or an agent commits, the branch and the conversation behind it go to the Artifacts repo in the background. Uncommitted work never leaves the machine. Branches are PRs.
+- **Many agents, one review.** Sessions that message each other (Claude Code peer messages) show up as turns from that agent. Each agent's commits arrive with their reasons.
+- **Every line knows its turn.** The PR page credits each changed line to the turn that wrote it: from exact before/after snapshots when recorded live, otherwise from the code inside that turn's own tool calls (agents often edit through Bash scripts). On a real 1,121-line PR, 96% of lines are traced.
+- **Hosted on Cloudflare.** A Worker serves the review page from the Artifacts repo (via a Container running the viewer). Artifacts push events go to a Queue. Workers AI writes summaries (DeepSeek) and makes small typed decisions (Clef-flash), with no API keys in the container.
+
+## Quick start (local)
+
+Needs Node 22.18 or newer, git, and Claude Code.
 
 ```sh
-git clone promptlog.bundle ~/Projects/promptlog && cd ~/Projects/promptlog && npm install
-mkdir -p ~/.local/bin && ln -s "$PWD/bin/promptlog" ~/.local/bin/promptlog   # no sudo; ~/.local/bin must be on PATH
+git clone <this repo> promptlog && cd promptlog && npm install
+mkdir -p ~/.local/bin && ln -s "$PWD/bin/promptlog" ~/.local/bin/promptlog   # ~/.local/bin must be on PATH
 
-cd ~/code/your-repo
-promptlog install                   # Claude Code hooks (.claude/settings.local.json) + git commit-trailer hooks
-# ...use Claude Code as usual, commit as usual...
-promptlog ls                        # captured sessions
-promptlog review main..my-branch    # the conversations behind a branch (text)
-promptlog view main..my-branch      # the review UI in your browser
-promptlog summarize main..my-branch
-promptlog ask main..my-branch "did it handle retries?"   # quick answer from the whole PR (Jev + Gemini Flash keys)
-promptlog ask <session> --at 2 "does this still hardcode USD?"
-promptlog fork <session> --at 2 --exec   # continue from turn 2 in a new worktree
-promptlog push / promptlog fetch    # share refs/promptlog/* with your remote
+cd ~/code/your-project
+promptlog install          # record Claude Code sessions here (hooks in .claude/settings.local.json + git hooks)
+# ...use Claude Code and commit as usual...
+promptlog ls               # recorded sessions
+promptlog view main..my-branch   # the review UI for a branch, on http://127.0.0.1:4777
+promptlog import <transcript.jsonl>   # bring in a past Claude Code session (~/.claude/projects/...)
 ```
 
-The CLI used to be `pl`. It was renamed because macOS already ships `/usr/bin/pl`.
-
-Try it on the demo without installing anything:
+Try it on the included demo, nothing to install beyond `npm install`:
 
 ```sh
 git clone -q fixtures/demo.bundle /tmp/demo && cd /tmp/demo \
   && git fetch -q origin '+refs/promptlog/*:refs/promptlog/*' && git checkout -q feature/rates \
-  && git branch -f main origin/main && ~/Projects/promptlog/bin/promptlog view main..feature/rates
+  && git branch -f main origin/main && ~/path/to/promptlog/bin/promptlog view main..feature/rates
 ```
 
-## How it works
+## On Cloudflare (Artifacts + Workers)
 
-- Hooks write one git commit per turn to `refs/promptlog/sessions/<id>`. Each holds the redacted transcript and snapshots of the working tree before and after the turn (`.gitignore` respected). Your branch, index and working tree are never touched. See `docs/format.md`.
-- Conversations link to code through commits, so sessions and PRs are many-to-many.
-- `ask` and `fork` materialize a turn's snapshot into a worktree and resume the conversation up to that point with `claude --resume <file> --fork-session`. See `docs/ask-fork.md`.
+Needs a Cloudflare account on Workers Paid, and wrangler logged in (`npx wrangler login`).
 
-Plan and status: `tasks.md`. Conventions: `CLAUDE.md`.
+1. **Connect a project to Artifacts:**
+   ```sh
+   cd ~/code/your-project
+   promptlog connect          # private Artifacts repo in namespace "promptlog", past sessions, first push
+   ```
+   From then on every commit (and the conversation behind it) is pushed automatically. `promptlog mirror` pushes by hand.
+2. **Deploy the review page** (`cloud/viewer`: a Worker plus a Container running `promptlog view` against the Artifacts repo):
+   ```sh
+   cd cloud/viewer && npm install
+   npx wrangler secret put VIEW_KEY     # any long random string; open the page once with ?key=<VIEW_KEY>
+   npx wrangler deploy                   # Docker must be running (the Container image is built locally)
+   ```
+   `REPO` in `cloud/viewer/wrangler.jsonc` is the default repo; `?repo=<name>` switches to another repo in the namespace. PR pages are `/review?base=main&head=<branch>`.
+   After a deploy, the Container keeps its old image until it restarts: open `/__restart` (with the key) once the new image has rolled out.
+
+## Develop
+
+```sh
+npm test            # node:test, no network
+npm run typecheck
+```
+
+TypeScript runs directly on Node (type stripping), no build step and no runtime dependencies. Layout: `src/core` (git storage, transcripts, review assembly, line attribution), `src/capture` (hooks, import, connect, mirror), `src/viewer` (pure HTML rendering + local server), `src/quick` (cheap model calls), `cloud/` (Workers). Storage format: `docs/format.md`. Contest plan and notes: `docs/cloudflare-challenge.md`.

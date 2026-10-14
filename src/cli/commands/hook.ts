@@ -1,5 +1,5 @@
 import { loadForkMarkerReader } from '../../capture/fork.ts';
-import { handleHook, logHookError, type HookPayload } from '../../capture/hook.ts';
+import { handleHook, logHookError, preToolUse, type HookPayload } from '../../capture/hook.ts';
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -13,6 +13,12 @@ export async function run(args: string[]): Promise<number> {
   try {
     payload = JSON.parse((await readStdin()) || '{}') as HookPayload;
     const ev = event || payload.hook_event_name || '';
+    if (ev === 'PreToolUse') {
+      // The only event that answers back: a lease refusal, which Claude Code shows the agent instead of running the tool.
+      const out = preToolUse(payload);
+      if (out) process.stdout.write(JSON.stringify(out));
+      return 0;
+    }
     // Only capturing events can record a fork parent; don't pay for loading src/ask on every prompt.
     const readForkMarker = ev === 'Stop' || ev === 'SessionEnd' ? await loadForkMarkerReader() : undefined;
     handleHook(ev, payload, { readForkMarker });

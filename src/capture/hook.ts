@@ -2,12 +2,13 @@
 import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { currentBranch, headSha, repoRoot } from '../core/git.ts';
-import { captureSession, localDir, relCwd, snapshotWorktree, type CaptureResult, type CurrentTurnInfo } from '../core/store.ts';
+import { captureSession, diffTrees, localDir, relCwd, snapshotWorktree, type CaptureResult, type CurrentTurnInfo } from '../core/store.ts';
 import type { SessionMeta } from '../core/types.ts';
 import { isHumanPrompt, parseEntry } from '../core/transcript.ts';
 import { forkParent, type ForkMarkerReader } from './fork.ts';
 import { repoRedactor } from './redact.ts';
 import { startMirror } from './mirror.ts';
+import { claim, refusalMessage, release, renew, toolTargets } from './leases.ts';
 import { readCaptureState, withSessionLock, writeCaptureState, type CaptureState, type SubagentRecord } from './state.ts';
 
 export interface HookPayload {
@@ -20,6 +21,9 @@ export interface HookPayload {
   source?: string;
   reason?: string;
   stop_hook_active?: boolean;
+  /** PreToolUse */
+  tool_name?: string;
+  tool_input?: Record<string, unknown>;
   /** SubagentStop */
   agent_id?: string;
   agent_type?: string;
@@ -79,6 +83,8 @@ function handleLocked(event: string, payload: HookPayload, ctx: Ctx, opts: HookO
         break;
       case 'UserPromptSubmit':
         state.pending = { startedAt: now, headBefore: headSha(root), stateBefore: snapshot(), branch: currentBranch(root) };
+        if (payload.prompt) state.ask = repoRedactor(root)(firstLineOf(payload.prompt)).slice(0, 160);
+        leaseSafe(root, event, () => renew(root, sessionId));
         break;
       case 'SubagentStop': {
         const p = payload.agent_transcript_path;
@@ -91,7 +97,14 @@ function handleLocked(event: string, payload: HookPayload, ctx: Ctx, opts: HookO
       case 'Stop': {
         const headAfter = headSha(root);
         const committed = !!state.pending && !!headAfter && state.pending.headBefore !== headAfter;
-        const res = capture(ctx, state, event, opts, { pending: state.pending, stateAfter: snapshot(), headAfter, endedAt: now });
+        const stateAfter = snapshot();
+        // Every file this turn changed is claimed, even if the edit-time check couldn't see it (unusual Bash).
+        const before = state.pending?.stateBefore;
+        if (before && stateAfter && before !== stateAfter) {
+          const changed = diffTrees(root, before, stateAfter).map((f) => f.path);
+          if (changed.length) leaseSafe(root, event, () => claim(root, holderOf(root, sessionId, state), changed, { force: true }));
+        }
+        const res = capture(ctx, state, event, opts, { pending: state.pending, stateAfter, headAfter, endedAt: now });
         if (res) {
           state.pending = undefined;
           state.turnsSinceCommit = [...new Set([...(state.turnsSinceCommit ?? []), res.currentTurn])];
@@ -109,6 +122,7 @@ function handleLocked(event: string, payload: HookPayload, ctx: Ctx, opts: HookO
           state.turnsSinceCommit = [...new Set([...(state.turnsSinceCommit ?? []), res.currentTurn])];
         }
         state.ended = true;
+        leaseSafe(root, event, () => release(root, sessionId));
         rmSync(join(localDir(root), `index-${sessionId}`), { force: true }); // temp snapshot index; rebuilt if the session resumes
         break;
       }
@@ -232,5 +246,51 @@ export function logHookError(cwd: string | undefined, event: string, err: unknow
     logError(root, event, err instanceof Error ? (err.stack ?? err.message) : String(err));
   } catch {
     // nothing else we can do
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Leases (src/capture/leases.ts)
+// ---------------------------------------------------------------------------
+
+const firstLineOf = (s: string) => s.replace(/<[^>]+>/g, ' ').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+
+function holderOf(root: string, sessionId: string, state: CaptureState | null) {
+  return { sessionId, branch: currentBranch(root), worktree: root, ...(state?.ask ? { ask: state.ask } : {}) };
+}
+
+function leaseSafe(root: string, event: string, fn: () => unknown): void {
+  if (process.env.PL_LEASES === 'off') return;
+  try {
+    fn();
+  } catch (err) {
+    logError(root, event, `leases: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** Hook output that tells Claude Code to refuse a tool call, with the reason the agent will read. */
+export interface PreToolUseOutput {
+  hookSpecificOutput: { hookEventName: 'PreToolUse'; permissionDecision: 'deny'; permissionDecisionReason: string };
+}
+
+/**
+ * PreToolUse (Edit/Write/MultiEdit/NotebookEdit/Bash): claim the files the call is about to change, or refuse the call
+ * when another live agent session holds one of them. Never throws; returns null to let the call through.
+ */
+export function preToolUse(payload: HookPayload): PreToolUseOutput | null {
+  if (process.env.PL_LEASES === 'off') return null;
+  const cwd = payload.cwd ?? process.cwd();
+  try {
+    if (!existsSync(cwd) || !payload.session_id || !isValidSessionId(payload.session_id) || !payload.tool_name) return null;
+    const root = repoRoot(cwd);
+    if (!root) return null;
+    const targets = toolTargets(root, cwd, payload.tool_name, payload.tool_input);
+    if (!targets.length) return null;
+    const { refused } = claim(root, holderOf(root, payload.session_id, readCaptureState(root, payload.session_id)), targets);
+    if (!refused.length) return null;
+    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: refusalMessage(refused) } };
+  } catch (err) {
+    logHookError(cwd, 'PreToolUse', err);
+    return null;
   }
 }

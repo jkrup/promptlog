@@ -40,7 +40,9 @@ test('promptlog install: Claude Code hooks include SubagentStop; git hooks insta
   const r = pl(repo, ['install', '--auto-push']);
   assert.equal(r.status, 0, r.stderr);
   const settings = JSON.parse(readFileSync(join(repo, '.claude', 'settings.local.json'), 'utf8'));
-  assert.deepEqual(Object.keys(settings.hooks).sort(), ['SessionEnd', 'SessionStart', 'Stop', 'SubagentStop', 'UserPromptSubmit']);
+  assert.deepEqual(Object.keys(settings.hooks).sort(), ['PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'SubagentStop', 'UserPromptSubmit']);
+  // PreToolUse only fires for tools that change files (leases).
+  assert.equal(settings.hooks.PreToolUse[0].matcher, 'Edit|Write|MultiEdit|NotebookEdit|Bash');
   for (const h of ['prepare-commit-msg', 'commit-msg', 'post-commit', 'pre-push']) assert.ok(isOurHook(join(hooks, h)), h);
   assert.ok(readFileSync(join(hooks, 'prepare-commit-msg.pre-promptlog'), 'utf8').includes('existing-hook'));
   assert.match(r.stdout, /kept your existing prepare-commit-msg hook/);

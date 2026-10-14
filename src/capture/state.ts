@@ -19,6 +19,8 @@ export interface CaptureState extends LocalSessionState {
   lastTurn?: number;
   /** Subagent transcripts to store with their turn; kept while that turn can still be rewritten. */
   subagents?: SubagentRecord[];
+  /** First line of what the current turn was asked (redacted), shown to other agents by leases. */
+  ask?: string;
 }
 
 export function readCaptureState(root: string, sessionId: string): CaptureState | null {
