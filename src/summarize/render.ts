@@ -379,6 +379,8 @@ function renderTurn(t: Turn, sessionId: string, c: TurnRenderCtx): string {
       if (it.subtype === 'interrupt') body.push('[the human interrupted the agent here]');
       else if (it.subtype === 'compact_boundary') body.push('[context was compacted here]');
       else if (it.subtype === 'compact_summary') body.push(`[compaction summary]: ${clipMiddle(it.text, Math.min(d.midText, 1500))}`);
+      // Words sent while the agent worked count like the prompt: corrections often arrive this way.
+      else if (it.subtype === 'midturn') body.push(`${it.from ? `[message from another Claude session (${it.from}), sent while the agent was working]` : '[the human, while the agent was working]'}: ${clipMiddle(it.text.trim(), d.prompt)}`);
       else if (d.toolResult > 0) body.push(`[${it.subtype}]: ${clipMiddle(c.strip(it.text), 300)}`);
     }
   });

@@ -23,6 +23,19 @@ export interface RawEntry {
   aiTitle?: string;
   /** queue-operation entries: enqueue | dequeue | remove. */
   operation?: string;
+  /** queue-operation remove: why the message left the queue ('absorbed_mid_turn'), and its id. */
+  reason?: string;
+  commandUuid?: string;
+  /** type 'attachment': context Claude Code adds to the next model call. 'queued_command' = a message sent mid-turn. */
+  attachment?: {
+    type?: string;
+    prompt?: unknown;
+    source_uuid?: string;
+    commandMode?: string;
+    /** handback: a report from one of this session's own subagents. */
+    origin?: { kind?: string; name?: string; body?: string; handback?: boolean };
+    timestamp?: string;
+  };
   message?: {
     id?: string;
     role?: string;
@@ -168,6 +181,62 @@ function isPromptQueueOp(e: RawEntry | null): boolean {
   return e?.type === 'queue-operation' && (e.operation === 'enqueue' || e.operation === 'dequeue');
 }
 
+const CROSS_SESSION = /<cross-session-message\b([^>]*)>\n?([\s\S]*?)(?:<\/cross-session-message>|$)/;
+
+/** The sender's session name and the message inside a `<cross-session-message from-name="…">` envelope. */
+export function crossSessionMessage(text: string): { from?: string; body: string } | null {
+  const m = CROSS_SESSION.exec(text);
+  if (!m) return null;
+  const name = /\bfrom-name="([^"]*)"/.exec(m[1]!)?.[1]?.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  return { ...(name ? { from: name } : {}), body: m[2]!.trim() };
+}
+
+/** A message that reached Claude while it was working. `from` is set when another Claude session sent it. */
+interface MidTurnMessage {
+  text: string;
+  from?: string;
+  /** The queued message's id, shared by its attachment (source_uuid) and its queue removal (commandUuid). */
+  id?: string;
+  timestamp?: string;
+  source: 'attachment' | 'remove';
+}
+
+const PEER_FALLBACK = 'another Claude session';
+
+/** Queued but not a message: background-task notices, and reports from this session's own subagents. */
+const NOT_A_MESSAGE = /^\s*<(task-notification|agent-message)\b/;
+
+/**
+ * Read a mid-turn message from a `queued_command` attachment (what Claude saw, with the sender) or, for transcripts
+ * that lack it, from the queue's `remove` (reason absorbed_mid_turn).
+ */
+function midTurnMessage(e: RawEntry): MidTurnMessage | null {
+  if (e.isSidechain) return null;
+  if (e.type === 'attachment' && e.attachment?.type === 'queued_command') {
+    const a = e.attachment;
+    const kind = a.origin?.kind;
+    if ((a.commandMode && a.commandMode !== 'prompt') || (kind && kind !== 'human' && kind !== 'peer') || a.origin?.handback) return null;
+    const raw = blocksOf(a.prompt)
+      .map((b) => (b.type === 'text' ? (b.text ?? '') : b.type === 'image' ? '[image]' : ''))
+      .filter(Boolean)
+      .join('\n');
+    if (NOT_A_MESSAGE.test(raw)) return null;
+    const env = crossSessionMessage(raw);
+    const text = kind === 'peer' && typeof a.origin?.body === 'string' ? a.origin.body : env ? env.body : cleanPromptText(raw);
+    const peer = kind === 'peer' || (!kind && !!env);
+    return { text: text.trim(), ...(peer ? { from: a.origin?.name || env?.from || PEER_FALLBACK } : {}), id: a.source_uuid, timestamp: a.timestamp ?? e.timestamp, source: 'attachment' };
+  }
+  if (e.type === 'queue-operation' && e.operation === 'remove' && (!e.reason || e.reason === 'absorbed_mid_turn') && typeof e.content === 'string') {
+    if (NOT_A_MESSAGE.test(e.content)) return null;
+    const env = crossSessionMessage(e.content);
+    return { text: (env ? env.body : cleanPromptText(e.content)).trim(), ...(env ? { from: env.from || PEER_FALLBACK } : {}), id: e.commandUuid, timestamp: e.timestamp, source: 'remove' };
+  }
+  return null;
+}
+
+/** For matching a message's attachment with its queue removal: image placeholders and spacing differ between them. */
+const midTurnKey = (text: string) => text.replace(/\[Image #\d+\]|\[image\]/gi, '').replace(/\s+/g, ' ').trim();
+
 /**
  * Split raw transcript lines into per-turn chunks, keyed by the ordinal of the human prompt.
  * Lines before the first prompt (preamble metadata) are attached to turn 1.
@@ -203,6 +272,8 @@ export function normalize(lines: string[]): Turn[] {
   const turns: Turn[] = [];
   const toolIndex = new Map<string, Extract<TurnItem, { kind: 'tool' }>>();
   let current: Turn | null = null;
+  // This turn's mid-turn messages, to pair each one's attachment with its queue removal (either can come first).
+  let mids: { item: Extract<TurnItem, { kind: 'event' }>; id?: string; key: string; sources: Set<string> }[] = [];
 
   const push = (item: TurnItem) => {
     if (!current) {
@@ -228,6 +299,27 @@ export function normalize(lines: string[]): Turn[] {
         items: [],
       };
       turns.push(current);
+      mids = [];
+      continue;
+    }
+
+    const mid = midTurnMessage(e);
+    if (mid) {
+      const key = midTurnKey(mid.text);
+      const same = mids.find((m) => !m.sources.has(mid.source) && (mid.id && m.id ? m.id === mid.id : m.key === key));
+      if (same) {
+        // The other half of a message already shown. The attachment knows more (sender, images), so it wins.
+        same.sources.add(mid.source);
+        if (mid.source === 'attachment') {
+          if (mid.text) same.item.text = mid.text;
+          if (mid.from) same.item.from = mid.from;
+          if (mid.timestamp) same.item.timestamp = mid.timestamp;
+        }
+      } else if (mid.text) {
+        const item: Extract<TurnItem, { kind: 'event' }> = { kind: 'event', subtype: 'midturn', text: mid.text, timestamp: mid.timestamp, ...(mid.from ? { from: mid.from } : {}) };
+        push(item);
+        mids.push({ item, id: mid.id, key, sources: new Set([mid.source]) });
+      }
       continue;
     }
 
@@ -275,7 +367,7 @@ export function normalize(lines: string[]): Turn[] {
       if (e.subtype === 'compact_boundary') push({ kind: 'event', subtype: 'compact_boundary', text: 'Conversation compacted', timestamp: e.timestamp });
       continue;
     }
-    // attachments, queue-operations, titles, mode, cost-state, etc. are skipped.
+    // other attachments and queue operations, titles, mode, cost-state, etc. are skipped.
   }
 
   for (const t of turns) {

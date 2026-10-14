@@ -268,6 +268,11 @@ body:has(#show-thinking:checked) .thinking { display: block; }
 .event { margin: 6px 0; font-size: 12.5px; color: var(--muted); }
 .event > summary { cursor: pointer; list-style: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 div.event, .event > summary { font-weight: 600; }
+.midturn { margin: 10px 0; padding: 8px 12px; border-left: 3px solid var(--border-strong); background: var(--surface-2); border-radius: 0 8px 8px 0; }
+.midturn.from-agent { border-left-color: var(--accent); }
+.midturn-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.midturn-label { font-weight: 600; margin-right: 4px; }
+.midturn-text { margin-top: 4px; font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: break-word; color: var(--text); }
 .ev-interrupt { color: var(--warn); }
 
 /* Turn footer */
@@ -588,6 +593,16 @@ form.qask button:disabled { opacity: .5; cursor: progress; }
 .pr-filesec .pr-file { margin-bottom: 8px; }
 .pr-commits { margin: 24px 0; font-size: 13.5px; color: var(--text-2); }
 .pr-commits ul { padding-left: 18px; }
+/* Messages that arrived while Claude was working on a turn */
+.pr-mid { margin: 10px 0 0; padding: 8px 12px; border-left: 3px solid var(--border-strong); background: var(--surface-2); border-radius: 0 8px 8px 0; }
+.pr-mid.from-agent { border-left-color: var(--accent); }
+.pr-mid-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.pr-mid-label { color: var(--muted); font-weight: 600; }
+.pr-mid-text { margin: 4px 0 0; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pr-mid-text.long > summary { list-style: none; cursor: pointer; }
+.pr-mid-text.long > summary::-webkit-details-marker { display: none; }
+.pr-mid-text.long[open] .pr-ask-head, .pr-mid-text.long[open] .pr-more { display: none; }
+.pr-q-mid { flex: none; font-size: 12px; color: var(--muted); }
 @media (max-width: 640px) {
   .pr-head h1 { font-size: 22px; }
   .pr-turn { padding: 10px 11px; border-radius: 10px; }

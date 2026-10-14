@@ -76,8 +76,12 @@ export type TurnItem =
       /** True when the call happened inside a subagent (sidechain). */
       sidechain?: boolean;
     }
-  /** Non-human user-side content: slash-command output, interrupts, compaction summaries, hook feedback. */
-  | { kind: 'event'; subtype: string; text: string; timestamp?: string };
+  /**
+   * Non-human user-side content: slash-command output, interrupts, compaction summaries, hook feedback.
+   * subtype 'midturn': a message that arrived while Claude was working and went into this turn instead of starting
+   * one. Typed by the person, or sent by another Claude session (`from` = its session name).
+   */
+  | { kind: 'event'; subtype: string; text: string; timestamp?: string; from?: string };
 
 export interface Turn {
   index: number;

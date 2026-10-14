@@ -40,6 +40,15 @@ export interface PrTurn {
   deletions: number;
   toolCalls: number;
   rawHref: string;
+  /** Messages that arrived while Claude was working on this turn (from the person, or from another agent). */
+  midTurn?: PrMidTurn[];
+}
+
+export interface PrMidTurn {
+  text: string;
+  who: string;
+  fromAgent: boolean;
+  at?: string;
 }
 
 export interface PrSession {
@@ -110,6 +119,18 @@ function didLine(t: PrTurn): Safe {
     : html`<div class="pr-did"><span class="pr-did-label">Claude</span><q>${t.did.text}</q></div>`;
 }
 
+/** Messages that reached Claude while it worked on this turn, each with who sent it. */
+function midTurnBlock(t: PrTurn): Safe {
+  return html`${(t.midTurn ?? []).map((m) => {
+    const text = m.text.trim();
+    const long = text.length > 600 || text.split('\n').length > 10;
+    return html`<div class="pr-mid${m.fromAgent ? ' from-agent' : ''}">
+<div class="pr-mid-head"><span class="pr-mid-label">Arrived while Claude was working</span>${m.fromAgent ? html`<span class="pr-who agent" title="A message from another Claude session">${m.who}</span><span class="pr-tag">agent</span>` : html`<span class="pr-who">${m.who}</span>`}${time(m.at, 'pr-at')}</div>
+${long ? html`<details class="pr-mid-text long"><summary><span class="pr-ask-head">${renderPrompt(text.slice(0, 420).trimEnd())}…</span><span class="pr-more">show all</span></summary><div class="pr-ask-full">${renderPrompt(text)}</div></details>` : html`<div class="pr-mid-text">${renderPrompt(text)}</div>`}
+</div>`;
+  })}`;
+}
+
 /** A turn that wrote code, or a message from another agent: the full card. */
 function workTurn(t: PrTurn): Safe {
   const nFiles = t.files.length;
@@ -121,6 +142,7 @@ function workTurn(t: PrTurn): Safe {
   ${nFiles ? html`<span class="pr-turn-stat">${plural(nFiles, 'file')} ${counts(t.additions, t.deletions)}</span>` : html`<span class="pr-turn-stat muted">no code</span>`}
 </header>
 ${askBlock(t)}
+${midTurnBlock(t)}
 ${didLine(t)}
 ${nFiles ? html`<div class="pr-files">${t.files.map((f, i) => turnFile(f, nFiles <= 2 && i === 0))}</div>` : ''}
 <a class="pr-raw" href="${t.rawHref}">Full turn${t.toolCalls ? ` · ${plural(t.toolCalls, 'tool call')}` : ''}</a>
@@ -131,15 +153,15 @@ ${nFiles ? html`<div class="pr-files">${t.files.map((f, i) => turnFile(f, nFiles
 function quietTurn(t: PrTurn): Safe {
   const first = t.ask.trim().split('\n')[0]!.slice(0, 160);
   return html`<details class="pr-quiet" id="${anchor(t.sessionId, t.turn)}">
-<summary><span class="pr-n">turn ${t.turn}</span><span class="pr-q-who">${t.who}</span><span class="pr-q-ask${t.command ? ' cmd' : ''}">${first || '(empty)'}</span></summary>
-<div class="pr-quiet-body">${askBlock(t)}${didLine(t)}<a class="pr-raw" href="${t.rawHref}">Full turn</a></div>
+<summary><span class="pr-n">turn ${t.turn}</span><span class="pr-q-who">${t.who}</span><span class="pr-q-ask${t.command ? ' cmd' : ''}">${first || '(empty)'}</span>${t.midTurn?.length ? html`<span class="pr-q-mid">+${plural(t.midTurn.length, 'message')} while working</span>` : ''}</summary>
+<div class="pr-quiet-body">${askBlock(t)}${midTurnBlock(t)}${didLine(t)}<a class="pr-raw" href="${t.rawHref}">Full turn</a></div>
 </details>`;
 }
 
 function sessionBlock(s: PrSession, multi: boolean): Safe {
   return html`<section class="pr-session c${s.color}">
 ${multi ? html`<h3 class="pr-session-title"><span class="dot" aria-hidden="true"></span>${s.title}${s.author ? html` <span class="muted">· ${s.author}</span>` : ''}</h3>` : ''}
-${s.turns.map((t) => (t.files.length || t.fromAgent ? workTurn(t) : quietTurn(t)))}
+${s.turns.map((t) => (t.files.length || t.fromAgent || t.midTurn?.some((m) => m.fromAgent) ? workTurn(t) : quietTurn(t)))}
 </section>`;
 }
 
