@@ -1,0 +1,7 @@
+{
+  // The public homepage: static files only, served by Workers static assets.
+  // Unknown paths get public/404.html with status 404. Headers live in public/_headers.
+  "name": "promptlog-home",
+  "compatibility_date": "2026-09-30",
+  "assets": { "directory": "./public", "not_found_handling": "404-page" }
+}

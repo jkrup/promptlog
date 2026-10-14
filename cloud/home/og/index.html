@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>promptlog link card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;600;700&display=block">
+<style>
+/* The 1200x630 link-preview card. Same tokens and type as public/index.html. Render with og/render.mjs. */
+:root { --bg: #f4f5f2; --surface: #fff; --code: #f8f9f6; --ink: #121614; --ink-2: #39423d; --muted: #646d68; --line: #d7dbd4;
+  --brand: #c2410c; --agent: #a12f70; --agent-soft: #f7e3ee; --add: #1a7f37; --add-bg: #e2f3e6; --del: #b42318; }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1200px; height: 630px; overflow: hidden; }
+body { background: var(--bg); color: var(--ink); font: 20px/1.45 'Schibsted Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  display: grid; grid-template-columns: 560px 1fr; gap: 44px; padding: 64px 64px 56px; }
+.left { display: flex; flex-direction: column; }
+.brand { display: inline-flex; align-items: center; gap: 12px; font: 700 30px/1 'Bricolage Grotesque', sans-serif; letter-spacing: -0.02em; }
+.brand::before { content: ''; width: 9px; height: 30px; border-radius: 2px; background: var(--brand); }
+h1 { margin-top: 44px; font: 800 74px/.98 'Bricolage Grotesque', sans-serif; letter-spacing: -0.035em; }
+h1 em { font-style: normal; color: var(--brand); }
+.sub { margin-top: 28px; font-size: 24px; line-height: 1.35; color: var(--ink-2); max-width: 26ch; }
+.foot { margin-top: auto; font: 500 17px/1.3 'IBM Plex Mono', monospace; color: var(--muted); letter-spacing: .01em; }
+.right { display: flex; flex-direction: column; gap: 14px; padding-top: 6px; }
+.label { font: 500 13px/1 'IBM Plex Mono', monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.label b { color: var(--ink); font-weight: 500; margin-right: 6px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 1px 2px rgb(18 22 20 / .05), 0 10px 30px -10px rgb(18 22 20 / .14); }
+.turn { padding: 18px 18px 16px; border-left: 4px solid var(--agent); font-size: 17px; display: grid; gap: 10px; }
+.head { display: flex; align-items: center; gap: 9px; font-size: 16px; }
+.av { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 10.5px/1 'Schibsted Grotesk'; background: var(--agent-soft); color: var(--agent); }
+.who { color: var(--agent); font-weight: 700; }
+.pill { font: 600 10px/1 'Schibsted Grotesk'; letter-spacing: .08em; text-transform: uppercase; padding: 4px 7px; border-radius: 99px; border: 1px solid var(--agent); color: var(--agent); }
+.t { font: 400 13px/1 'IBM Plex Mono', monospace; color: var(--muted); }
+blockquote { padding-left: 12px; border-left: 2px solid var(--agent); }
+.arrow { font: 500 14px/1 'IBM Plex Mono', monospace; color: var(--muted); padding-left: 4px; }
+.arrow .add { color: var(--add); } .arrow .del { color: var(--del); }
+.code { overflow: hidden; }
+.code-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font: 500 13px/1.3 'IBM Plex Mono', monospace; color: var(--ink-2); }
+.ln { display: grid; grid-template-columns: 62px 1fr; background: var(--add-bg); font: 400 14px/1.8 'IBM Plex Mono', monospace; white-space: pre; }
+.ln span:first-child { font: 600 10.5px/2.3 'Schibsted Grotesk'; color: var(--agent); padding-left: 12px; border-right: 3px solid var(--agent); margin-right: 10px; }
+.code-body { padding: 8px 0; background: var(--add-bg); }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand">promptlog</div>
+    <h1>Review the <em>conversation</em> that built the code.</h1>
+    <p class="sub">Code is the compiled output now. The conversation is the source.</p>
+    <p class="foot">Claude Code · Cloudflare Workers + Artifacts · MIT</p>
+  </div>
+  <div class="right">
+    <p class="label"><b>Source</b>the conversation</p>
+    <div class="card turn">
+      <div class="head"><span class="av">BA</span><span class="who">Blog SEO audit</span><span class="pill">agent</span><span class="t">turn 13</span></div>
+      <blockquote>“Field report on the clef-browser MCP: it failed on two custom dropdowns (Google Search Console and Cloudflare DNS)…”</blockquote>
+    </div>
+    <p class="arrow">↓ wrote 8 files, <span class="add">+247</span> <span class="del">−14</span></p>
+    <div class="card code">
+      <div class="code-head">src/content/snapshot.ts</div>
+      <div class="code-body">
+        <div class="ln"><span>turn 13</span><span>function openPopupItems(): Set&lt;Element&gt; {</span></div>
+        <div class="ln"><span></span><span>  const items = new Set&lt;Element&gt;();</span></div>
+      </div>
+    </div>
+  </div>
+  <script>document.fonts.ready.then(() => { document.body.dataset.ready = '1'; });</script>
+</body>
+</html>
