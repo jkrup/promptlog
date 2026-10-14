@@ -87,7 +87,7 @@ section { padding: 72px 0; }
 .kicker::before { content: ''; width: 4px; height: 14px; background: var(--brand); border-radius: 1px; }
 h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; max-width: 20ch; }
 .lede { font-size: 19px; color: var(--ink-2); max-width: 62ch; margin-top: 18px; }
-.btn { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 20px; border-radius: 10px; font: 600 16px/1 var(--f-body); text-decoration: none; border: 1.5px solid var(--ink); transition: transform .12s ease, background-color .12s ease; }
+.btn { display: inline-flex; align-items: center; gap: 9px; min-height: 48px; padding: 0 17px; border-radius: 10px; font: 600 16px/1 var(--f-body); text-decoration: none; border: 1.5px solid var(--ink); transition: transform .12s ease, background-color .12s ease; }
 .btn:hover { transform: translateY(-1px); }
 .btn-primary { background: var(--ink); color: var(--bg); }
 .btn-ghost { color: var(--ink); background: transparent; }
@@ -105,14 +105,15 @@ h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; m
 .hero h1 { font-size: clamp(42px, 6.4vw, 72px); line-height: .98; font-weight: 800; letter-spacing: -0.035em; max-width: 17ch; }
 .hero h1 em { font-style: normal; color: var(--brand); }
 .hero .sub { font-size: clamp(19px, 2.2vw, 23px); line-height: 1.45; color: var(--ink-2); max-width: 46ch; margin-top: 24px; }
-.hero .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-.hero .note { margin-top: 18px; font-size: 14px; color: var(--muted); }
+.hero .ctas { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+.hero .note { margin-top: 18px; font-size: 14.5px; color: var(--muted); max-width: 58ch; }
+.hero .note code { font-size: .92em; color: var(--ink-2); }
 
 /* source -> output demo */
 .hero-grid { display: grid; gap: 48px; }
-@media (min-width: 960px) { .hero-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 56px; align-items: end; } }
+@media (min-width: 960px) { .hero-grid { grid-template-columns: minmax(0, 13fr) minmax(0, 8fr); gap: 56px; align-items: end; } }
 .arrow-row { display: grid; }
-@media (min-width: 960px) { .arrow-row { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); column-gap: 56px; } .arrow-row .arrow { grid-column: 2; } }
+@media (min-width: 960px) { .arrow-row { grid-template-columns: minmax(0, 13fr) minmax(0, 8fr); column-gap: 56px; } .arrow-row .arrow { grid-column: 2; } }
 .pane { display: flex; flex-direction: column; min-width: 0; }
 .pane-label { font: 500 12px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px 2px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .pane-label b { color: var(--ink); font-weight: 600; }
@@ -174,6 +175,10 @@ h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; m
 @media (min-width: 960px) { .split { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 56px; } .split.flip { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); } .split.agents-split { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 48px; } }
 .notes { display: grid; gap: 22px; }
 .stack { display: grid; gap: 40px; margin-top: 44px; }
+@media (min-width: 960px) { .split.ov-split { grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); gap: 48px; } }
+.ov-cta { display: grid; gap: 10px; justify-items: start; font-size: 14.5px; color: var(--muted); margin-top: 4px; }
+.stop-shot { margin-top: 14px; }
+.stop-shot .frame { border-radius: 12px; }
 .stack .shot { max-width: 940px; }
 @media (min-width: 900px) { .notes.cols3 { grid-template-columns: repeat(3, 1fr); gap: 32px; } }
 .note-item h3 { font-size: 20px; line-height: 1.2; margin-bottom: 6px; }
@@ -195,6 +200,8 @@ h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; m
 /* ---------- leases ---------- */
 .lease-facts { align-self: start; }
 .lease-facts code, .req code { white-space: nowrap; }
+.lease-facts code { white-space: normal; overflow-wrap: anywhere; }
+.lease-facts code.blk { display: block; width: fit-content; max-width: 100%; margin-top: 8px; padding: 6px 9px; }
 .lease-demo { display: grid; gap: 12px; min-width: 0; }
 .tool { overflow: hidden; border-left: 3px solid var(--del); }
 .tool-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -238,13 +245,11 @@ h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; m
 @media (min-width: 960px) { .ai-link { margin-left: 50%; } }
 .node.ai { border-style: dashed; }
 .cf-notes { margin-top: 44px; display: grid; gap: 22px; }
-@media (min-width: 900px) { .cf-notes { grid-template-columns: repeat(3, 1fr); gap: 32px; } }
+@media (min-width: 700px) { .cf-notes { grid-template-columns: repeat(2, 1fr); gap: 28px; } }
+@media (min-width: 1080px) { .cf-notes { grid-template-columns: repeat(4, 1fr); } }
+.cf-notes code { font-size: .9em; }
 .instance { margin-top: 36px; font-size: 15px; color: var(--muted); }
 .instance code { color: var(--ink-2); font-size: 14px; overflow-wrap: anywhere; }
-
-/* ---------- concept ---------- */
-.concept-tag { position: absolute; top: 12px; right: 12px; z-index: 1; font: 600 11.5px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: 7px 10px; border-radius: 6px; background: var(--ink); color: var(--bg); }
-.concept .frame { position: relative; border-style: dashed; border-width: 1.5px; border-color: var(--line-2); }
 
 /* ---------- quickstart ---------- */
 .qs { margin-top: 36px; display: grid; gap: 18px; }
@@ -263,6 +268,11 @@ h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; m
 .req li::before { content: ''; position: absolute; left: 0; top: .62em; width: 7px; height: 7px; border-radius: 2px; background: var(--brand); }
 .req code { font-size: 14px; background: var(--surface); border: 1px solid var(--line); padding: 1px 5px; border-radius: 5px; }
 
+.qs-side { display: grid; gap: 24px; }
+@media (max-width: 959px) { .qs .qs-side { order: -1; } }
+.qs-demo { display: grid; gap: 10px; justify-items: start; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.qs-demo p { font-size: 15px; color: var(--ink-2); }
+
 /* ---------- footer ---------- */
 footer { border-top: 1px solid var(--line); padding: 40px 0 56px; font-size: 15px; color: var(--muted); }
 footer .wrap { display: grid; gap: 14px; }
@@ -278,10 +288,12 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
     <a class="brand" href="/" aria-label="promptlog home">promptlog</a>
     <nav aria-label="Sections">
       <a href="#how">How it works</a>
+      <a href="#overview">Overview</a>
       <a href="#agents">Agents</a>
       <a href="#leases">Leases</a>
       <a href="#cloudflare">Cloudflare</a>
       <a href="#start">Try it</a>
+      <a class="keep" href="https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&amp;head=feature%2Frates&amp;repo=promptlog-demo">Live demo</a>
       <a class="keep" href="https://github.com/jkrup/promptlog">GitHub</a>
     </nav>
   </div>
@@ -297,7 +309,11 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
         <h1>Review the <em>conversation</em> that built the code.</h1>
         <p class="sub">Code is the compiled output now. The prompts and the agent’s conversation are the source. promptlog records that source with every commit and puts it in the review.</p>
         <div class="ctas">
-          <a class="btn btn-primary" href="#video">
+          <a class="btn btn-primary" href="https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&amp;head=feature%2Frates&amp;repo=promptlog-demo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6m0-6L10 14M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+            Open the live demo
+          </a>
+          <a class="btn btn-ghost" href="#video">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.5v13a1 1 0 0 0 1.5.86l10.6-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>
             Watch the demo
           </a>
@@ -305,8 +321,8 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
             <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
             Source on GitHub
           </a>
-    </div>
-        <p class="note">Open source, MIT. Works with Claude Code. Runs on Cloudflare Workers and Artifacts.</p>
+        </div>
+        <p class="note">The live demo is public, no sign-in: a small Node server and the two Claude Code sessions that built its <code>/rates</code> endpoint, stored in Cloudflare Artifacts. The overview at the top is written by a model on the first visit, which can take about 50 seconds; after that it loads at once.</p>
       </div>
       <div class="pane src" aria-label="From a real PR: one conversation turn">
         <p class="pane-label"><b>Source</b> the conversation</p>
@@ -326,7 +342,7 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
     <div class="arrow-row" aria-hidden="true">
       <div class="arrow">
         <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 4v15m-6-6 6 6 6-6"/></svg>
-        <span>wrote 8 files, <span class="add">+247</span> <span class="del">−14</span></span>
+        <span>wrote 8 files, <span class="add">+254</span> <span class="del">−14</span></span>
       </div>
     </div>
     <div class="pane out" aria-label="The code that turn wrote">
@@ -381,8 +397,8 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
       <li class="card step">
         <span class="n">3</span>
         <h3>Review the conversation</h3>
-        <p>Open the PR page. Every changed line is credited to the turn that wrote it. Each turn shows who asked, what they asked, how Claude replied, and the code it wrote.</p>
-        <div class="cmd"><a href="#real" class="quiet" style="text-decoration:none">see a real PR ↓</a></div>
+        <p>Open the PR page. At the top: what changed, and why, in plain words. Below: every turn, with who asked, what they asked, how Claude replied, and the code it wrote. Every changed line is credited to the turn that wrote it.</p>
+        <div class="cmd"><a href="https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&amp;head=feature%2Frates&amp;repo=promptlog-demo" class="quiet" style="text-decoration:none">open the live demo ↗</a></div>
       </li>
     </ol>
   </div>
@@ -393,37 +409,74 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
   <div class="wrap">
     <div class="video-box">
       <picture>
-        <source srcset="img/pr-top-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="800" height="1784">
-            <source srcset="img/pr-top-m-light.webp" media="(max-width: 640px)" width="800" height="1784">
-            <source srcset="img/pr-top-dark.webp" media="(prefers-color-scheme: dark)">
-        <img src="img/pr-top-light.webp" alt="" width="1880" height="1496" loading="lazy" decoding="async">
+        <source srcset="img/overview-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="800" height="2010">
+        <source srcset="img/overview-m-light.webp" media="(max-width: 640px)" width="800" height="2010">
+        <source srcset="img/overview-dark.webp" media="(prefers-color-scheme: dark)" width="1880" height="2278">
+        <img src="img/overview-light.webp" width="1880" height="2278" loading="lazy" decoding="async" alt="">
       </picture>
       <div class="msg">
         <span class="play" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13a1 1 0 0 0 1.5.86l10.6-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg></span>
         <p>Demo video</p>
-        <small>Coming soon. Until then, the screenshots below are from the real product.</small>
+        <small>Coming soon. Until then, open the live demo, or see the screenshots below from the real product.</small>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ================= real PR ================= -->
-<section id="real" aria-labelledby="real-h" style="padding-top:24px">
+<!-- ================= overview ================= -->
+<section id="overview" aria-labelledby="overview-h" style="padding-top:24px">
   <div class="wrap">
-    <p class="kicker">A real PR</p>
-    <h2 id="real-h">Every line, traced to the turn that wrote it.</h2>
-    <p class="lede">This is <code style="font-size:.88em">clef-visibility-and-safety</code>, a branch of a browser extension built with Claude Code: 7 commits, 18 files, <span class="add">+1,089</span> <span class="del">−81</span>.</p>
-    <div class="stack">
+    <p class="kicker">At the top of every PR</p>
+    <h2 id="overview-h">What changed, and why.</h2>
+    <p class="lede">Before any code, the PR page says what changed and why, grouped by change rather than by turn. This is <code style="font-size:.88em">clef-visibility-and-safety</code>, a branch of a browser extension built with Claude Code: 7 commits, 18 files, <span class="add">+1,089</span> <span class="del">−81</span>.</p>
+    <div class="split ov-split">
       <figure class="shot">
-        <a class="frame" href="img/pr-top-light.webp">
+        <a class="frame" href="img/overview-light.webp">
           <picture>
-            <source srcset="img/pr-top-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="800" height="1784">
-            <source srcset="img/pr-top-m-light.webp" media="(max-width: 640px)" width="800" height="1784">
-            <source srcset="img/pr-top-dark.webp" media="(prefers-color-scheme: dark)">
-            <img src="img/pr-top-light.webp" width="1880" height="1496" loading="lazy" decoding="async" alt="The promptlog PR page for clef-visibility-and-safety: 7 commits, 18 files, 11 turns wrote code, 23 messages from other agents. 1,125 of 1,170 changed lines traced to the turn that wrote them (96%). Turn 5 shows the request, Claude's reply, and the one line it changed in src/content/snapshot.ts.">
+            <source srcset="img/overview-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="800" height="2010">
+            <source srcset="img/overview-m-light.webp" media="(max-width: 640px)" width="800" height="2010">
+            <source srcset="img/overview-dark.webp" media="(prefers-color-scheme: dark)" width="1880" height="2278">
+            <img src="img/overview-light.webp" width="1880" height="2278" loading="lazy" decoding="async" alt="The top of the promptlog PR page for clef-visibility-and-safety. What changed, and why: a one-line summary, who drove the code (59% answering the Blog SEO audit agent, 36% answering jkrup, 5% answering a hackathon session), then changes such as Dropdown options and listbox scrolling, and Form safety and input format validation. Each change quotes the agent words that caused it with turn links, marks Tried for real: worked, and lists the files it touched.">
           </picture>
         </a>
-        <figcaption><b>The top of the PR page.</b> 1,125 of 1,170 changed lines (96%) are traced to the turn that wrote them. Turn 5 is a one-line request, Claude’s reply, and the one line it changed.</figcaption>
+        <figcaption><b>A real PR page.</b> Each change quotes the words that caused it, says who said them, and links to the turns and files.</figcaption>
+      </figure>
+      <div class="notes">
+        <div class="note-item">
+          <h3>One model call, then checked by code</h3>
+          <p>A model reads the conversation and groups the work into changes. Code then checks every quote against the conversation. A quote that isn’t really there is dropped.</p>
+        </div>
+        <div class="note-item">
+          <h3>The reason, word for word</h3>
+          <p>Each change has a plain “what”, and the reason quoted exactly, with who said it: a person, another agent, or Claude.</p>
+        </div>
+        <div class="note-item">
+          <h3>Did anyone try it?</h3>
+          <p>When someone ran it for real, the change says so, quoting what they saw: “Tried for real: worked”.</p>
+        </div>
+        <p class="ov-cta"><a class="btn btn-ghost" href="https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&amp;head=feature%2Frates&amp;repo=promptlog-demo">Open the live demo ↗</a><span>Public. The first visit writes the overview, which takes about 50 seconds.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= traced ================= -->
+<section id="real" aria-labelledby="real-h" style="padding-top:24px">
+  <div class="wrap">
+    <p class="kicker">Below the overview</p>
+    <h2 id="real-h">Every line, traced to the turn that wrote it.</h2>
+    <p class="lede">The conversation, turn by turn, each with the code it wrote. In this PR, 1,126 of 1,170 changed lines (96%) are traced to their turn.</p>
+    <div class="stack">
+      <figure class="shot">
+        <a class="frame" href="img/turn5-light.webp">
+          <picture>
+            <source srcset="img/turn5-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="776" height="736">
+            <source srcset="img/turn5-m-light.webp" media="(max-width: 640px)" width="776" height="736">
+            <source srcset="img/turn5-dark.webp" media="(prefers-color-scheme: dark)" width="1768" height="674">
+            <img src="img/turn5-light.webp" width="1768" height="674" loading="lazy" decoding="async" alt="Turn 5 on the PR page: jkrup asks to fix the extension first, then finish the dashboard. Claude reply, summarized and marked as a summary. Below, the one line it added in src/content/snapshot.ts, line 379, shown in context.">
+          </picture>
+        </a>
+        <figcaption><b>Turn 5:</b> a one-line request, Claude’s reply (summarized, and marked so), and the one line it changed.</figcaption>
       </figure>
       <div class="notes cols3">
         <div class="note-item">
@@ -453,21 +506,29 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
       <div>
         <div class="stat">59%</div>
         <p class="stat-cap">of the code in this PR was written in answer to the other agent.</p>
-        <div class="bar" role="img" aria-label="Who the code was answering: Blog SEO audit agent 59 percent, the developer 36 percent, a hackathon session 5 percent"><span class="b-agent"></span><span class="b-person"></span><span class="b-other"></span></div>
+        <div class="bar" role="img" aria-label="Who the code was answering: Blog SEO audit agent 59 percent, jkrup, the developer, 36 percent, a hackathon session 5 percent"><span class="b-agent"></span><span class="b-person"></span><span class="b-other"></span></div>
         <ul class="legend">
           <li><span class="sw" style="background:var(--agent)"></span><span class="pct">59%</span><span>Blog SEO audit <span class="pill" style="color:var(--agent);font-size:9.5px;padding:3px 6px">agent</span></span></li>
-          <li><span class="sw" style="background:var(--person);opacity:.85"></span><span class="pct">36%</span><span>Maz, the developer</span></li>
+          <li><span class="sw" style="background:var(--person);opacity:.85"></span><span class="pct">36%</span><span>jkrup, the developer</span></li>
           <li><span class="sw" style="background:var(--muted)"></span><span class="pct">5%</span><span>hackathon session <span class="pill" style="color:var(--muted);font-size:9.5px;padding:3px 6px">agent</span></span></li>
         </ul>
-        <p class="quote-line">Messages that arrive mid-task count too. One said <q>we need a stop button</q>. The Stop button shipped in this PR.</p>
+        <p class="quote-line">Messages that arrive while Claude is working are captured too. One, typed mid-task, is now the quoted reason for the Stop button, typo and all:</p>
+        <figure class="shot stop-shot">
+          <a class="frame" href="img/stop-m-light.webp">
+            <picture>
+              <source srcset="img/stop-m-dark.webp" media="(prefers-color-scheme: dark)" width="776" height="494">
+              <img src="img/stop-m-light.webp" width="776" height="494" loading="lazy" decoding="async" alt="A change card from the overview: On-page and popup execution controls. Adds a red Stop button to the page overlay and popup. Reason, quoted from jkrup: your fixes not working and we need a stop buddton, turn 16. Files: snapshot.ts, Popup.tsx, bridge.ts, overlay.ts.">
+            </picture>
+          </a>
+        </figure>
       </div>
       <figure class="shot">
-        <a class="frame" href="img/agent-turn-light.webp">
+        <a class="frame" href="img/turn13-light.webp">
           <picture>
-            <source srcset="img/agent-turn-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="800" height="1772">
-            <source srcset="img/agent-turn-m-light.webp" media="(max-width: 640px)" width="800" height="1772">
-            <source srcset="img/agent-turn-dark.webp" media="(prefers-color-scheme: dark)">
-            <img src="img/agent-turn-light.webp" width="1768" height="1380" loading="lazy" decoding="async" alt="Turn 13 on the PR page, from Blog SEO audit, marked AGENT: a field report saying the browser tool failed on two custom dropdowns while setting up Search Console. Below it, Claude's reply and the 8 files it changed, +247 −14.">
+            <source srcset="img/turn13-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="776" height="1916">
+            <source srcset="img/turn13-m-light.webp" media="(max-width: 640px)" width="776" height="1916">
+            <source srcset="img/turn13-dark.webp" media="(prefers-color-scheme: dark)" width="1768" height="1478">
+            <img src="img/turn13-light.webp" width="1768" height="1478" loading="lazy" decoding="async" alt="Turn 13 on the PR page, from Blog SEO audit, marked AGENT: a field report saying the browser tool failed on two custom dropdowns while setting up Search Console. Below it, Claude's reply and the 8 files it changed, +254 −14.">
           </picture>
         </a>
         <figcaption><b>Turn 13:</b> a field report from the Blog SEO audit session, Claude’s reply, and the 8 files it changed.</figcaption>
@@ -481,13 +542,14 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
   <div class="wrap">
     <p class="kicker">Many agents, one repo</p>
     <h2 id="leases-h">Leases: two agents never edit the same file at once.</h2>
-    <p class="lede">Before an agent changes a file, promptlog claims it. If another live agent session holds that file, the edit is refused, and the agent is told who holds it: their branch, what they were asked, and when they were last active. So it works on something else, or messages that agent.</p>
+    <p class="lede">Before an agent changes a file, promptlog claims it. If another live agent session holds that file, the edit is refused, and the agent is told who holds it: their branch, what they were asked, and when they were last active. So it works on something else, or messages that agent. On one machine the table is shared by every worktree; across machines it lives in a Cloudflare Durable Object, so agents on different laptops see each other too.</p>
     <div class="split flip">
       <ul class="req lease-facts">
-        <li>Shared across every worktree of the repo, so parallel agents in separate worktrees see each other.</li>
+        <li>One machine: shared across every worktree of the repo, so parallel agents in separate worktrees see each other.</li>
+        <li>Many machines: one Durable Object per repo holds the table. Join a clone, with the repo’s lease key: <code class="blk">promptlog connect --leases &lt;worker-url&gt;</code></li>
         <li>Renewed by activity. A lease expires after 15 quiet minutes, and ends when its session ends.</li>
         <li>Covers Claude’s Edit and Write tools, and Bash commands that write files.</li>
-        <li><code>promptlog leases</code> lists who holds what. <code>promptlog leases release</code> frees a file by hand.</li>
+        <li><code>promptlog leases</code> lists who holds what. The review Worker’s <code>/leases</code> page shows the same in a browser: <a href="https://promptlog-viewer.mazlix-f8e.workers.dev/leases?repo=promptlog-demo">the demo repo’s page</a>.</li>
       </ul>
       <div class="lease-demo">
         <div class="tool card">
@@ -513,13 +575,21 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
   <div class="wrap">
     <p class="kicker">Built on Cloudflare</p>
     <h2 id="cf-h">Everything after the commit runs on Cloudflare.</h2>
-    <p class="lede">No server to run and no API keys anywhere. The repo, the events, the review page and the AI are all Cloudflare.</p>
+    <p class="lede">No server to run and no API keys anywhere. The repo, the events, the review page, the leases and the AI are all Cloudflare.</p>
 
     <div class="flow" aria-label="How a commit becomes a review page">
-      <div class="node">
-        <p class="k">Your machine</p>
-        <h3>Claude Code sessions</h3>
-        <p>You and any number of agents, working as usual.</p>
+      <div class="worker-col">
+        <div class="node">
+          <p class="k">Your machines</p>
+          <h3>Claude Code sessions</h3>
+          <p>You and any number of agents, working as usual.</p>
+        </div>
+        <div class="ai-link" aria-hidden="true"></div>
+        <div class="node cfn ai">
+          <p class="k">Durable Object</p>
+          <h3>Leases</h3>
+          <p>One per repo. Before each edit, an agent claims the file here, from any machine.</p>
+        </div>
       </div>
       <div class="edge"><span>commit + push</span></div>
       <div class="node cfn">
@@ -559,32 +629,15 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
         <p>Every commit pushes itself to Artifacts in the background. The review page reads the newest version when you open it. Artifacts push events are wired to a Queue for live updates.</p>
       </div>
       <div class="note-item">
+        <h3>Leases in a Durable Object</h3>
+        <p>One Durable Object per repo holds the lease table, so agents on different machines share it. The <code>/leases</code> page shows who’s working on what.</p>
+      </div>
+      <div class="note-item">
         <h3>AI without keys</h3>
         <p>Text and decisions run on Workers AI, through the Worker’s own binding. Nothing to sign up for, nothing to leak.</p>
       </div>
     </div>
-    <p class="instance">Our own instance runs at <code>promptlog-viewer.mazlix-f8e.workers.dev</code>. It is private: pages need a key.</p>
-  </div>
-</section>
-
-<!-- ================= next ================= -->
-<section id="next" class="concept" aria-labelledby="next-h">
-  <div class="wrap">
-    <p class="kicker">Coming next</p>
-    <h2 id="next-h">What changed, and why, at the top of every PR.</h2>
-    <p class="lede">An overview grouped by change, not by turn. Each change shows the exact words that caused it, who said them, and whether anyone tried it on a live page.</p>
-    <figure class="shot" style="margin-top:40px">
-      <a class="frame" href="img/concept-light.webp">
-        <span class="concept-tag">Concept</span>
-        <picture>
-          <source srcset="img/concept-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="800" height="1230">
-            <source srcset="img/concept-m-light.webp" media="(max-width: 640px)" width="800" height="1230">
-            <source srcset="img/concept-dark.webp" media="(prefers-color-scheme: dark)">
-          <img src="img/concept-light.webp" width="1704" height="1428" loading="lazy" decoding="async" alt="Concept mockup of a PR overview: a one-paragraph summary, stats, who drove the code (59% answering the Blog SEO audit agent), and a 'What changed, and why' list where each change quotes the words that caused it, with turn and file chips and a 'Partly tried live' badge.">
-        </picture>
-      </a>
-      <figcaption><b>Concept mockup,</b> built from this PR’s real data. Not in the product yet.</figcaption>
-    </figure>
+    <p class="instance">The review Worker runs at <code>promptlog-viewer.mazlix-f8e.workers.dev</code>. The <a href="https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&amp;head=feature%2Frates&amp;repo=promptlog-demo">demo repo</a> on it is public; every other repo needs a key.</p>
   </div>
 </section>
 
@@ -605,12 +658,18 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
 <span class="ok">Brought in 6 past Claude Code session(s): 418 turns, linked to 37 commit(s).</span>
 <span class="ok">Pushed 3 branch(es) (12 MB). From now on every commit pushes itself.</span></pre>
       </div>
+      <div class="qs-side">
+      <div class="qs-demo">
+        <a class="btn btn-primary" href="https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&amp;head=feature%2Frates&amp;repo=promptlog-demo"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6m0-6L10 14M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>Open the live demo</a>
+        <p>Nothing to install: a public repo on Cloudflare Artifacts. The overview at the top is written by a model on the first visit (about 50 seconds), then cached.</p>
+      </div>
       <ul class="req">
         <li>Needs Node 22.18 or newer, Claude Code, and a Cloudflare account. Log in once with <code>npx wrangler login</code>.</li>
         <li>The Artifacts repo is private. Its write token goes to git’s credential store, never to the screen or the repo.</li>
         <li>To read reviews on your own machine, run <code>promptlog view</code> in the folder.</li>
         <li>Hooks never block Claude. If recording fails, it logs the error and gets out of the way.</li>
       </ul>
+      </div>
     </div>
   </div>
 </section>
@@ -624,6 +683,7 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
       <a href="https://github.com/jkrup/promptlog">GitHub</a>
       <a href="#how">How it works</a>
       <a href="#start">Try it</a>
+      <a href="https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&amp;head=feature%2Frates&amp;repo=promptlog-demo">Live demo</a>
     </div>
   </div>
 </footer>
