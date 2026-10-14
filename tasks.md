@@ -120,6 +120,8 @@ Follow-ups:
 - [ ] `promptlog install` as a proper Claude Code plugin (`plugin/` + marketplace entry) instead of settings.json edits
 - [x] Linking a fork's captured session to its parent (`SessionMeta.parent`)
 - [x] Bug: `queue-operation` lines leaked the next prompt into turn N (fixed in splitByTurn)
+- [x] Messages sent while Claude was working (by the person or another session) show inside the turn they landed in: PR card, session page, `show`, summarizer input
+- [ ] A subagent's report that arrives while the session is idle (user entry, `origin.kind: 'peer'`, `handback: true`) becomes its own turn "from another Claude session"; it's the session's own helper, not a peer (138 such turns across 20 local transcripts). Fixing it renumbers later turns, so stored sessions need a rebuild
 - [ ] An interrupted turn loses its before-snapshot when the next prompt arrives
 - [ ] `git commit --amend -m` drops the `Promptlog:` trailer
 - [ ] `promptlog fetch` keeps the local ref on divergence instead of merging `refs/promptlog/asks/*` (same issue as the M3 follow-up)

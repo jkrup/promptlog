@@ -222,7 +222,7 @@ type Segment =
   | { kind: 'text'; text: string; final: boolean }
   | { kind: 'tools'; tools: ToolItem[] }
   | { kind: 'thinking'; text: string }
-  | { kind: 'event'; subtype: string; text: string };
+  | { kind: 'event'; subtype: string; text: string; from?: string; timestamp?: string };
 
 export function segments(items: TurnItem[]): Segment[] {
   const out: Segment[] = [];
@@ -233,7 +233,7 @@ export function segments(items: TurnItem[]): Segment[] {
       else out.push({ kind: 'tools', tools: [it] });
     } else if (it.kind === 'text') out.push({ kind: 'text', text: it.text, final: false });
     else if (it.kind === 'thinking') out.push({ kind: 'thinking', text: it.text });
-    else out.push({ kind: 'event', subtype: it.subtype, text: it.text });
+    else out.push({ kind: 'event', subtype: it.subtype, text: it.text, ...(it.from ? { from: it.from } : {}), ...(it.timestamp ? { timestamp: it.timestamp } : {}) });
   }
   for (let i = out.length - 1; i >= 0; i--) {
     const s = out[i]!;
@@ -380,7 +380,16 @@ function toolDetail(ctx: RenderCtx, t: ToolItem): Safe {
 </details></li>`;
 }
 
-function renderSegment(ctx: RenderCtx, seg: Segment): Safe {
+/** A message that reached Claude mid-turn: always shown, with who sent it (`author` when the person typed it). */
+function midTurnSegment(seg: Extract<Segment, { kind: 'event' }>, author: string | undefined): Safe {
+  const who = seg.from ?? author;
+  return html`<div class="midturn${seg.from ? ' from-agent' : ''}" role="note">
+<div class="midturn-head"><span class="midturn-label">Arrived while Claude was working</span>${who ? html`<span class="avatar" aria-hidden="true">${initials(who)}</span><span class="who">${who}</span>` : ''}${seg.from ? html`<span class="muted">another Claude session</span>` : ''}${time(seg.timestamp, 'when')}</div>
+<div class="midturn-text">${renderPrompt(seg.text)}</div>
+</div>`;
+}
+
+function renderSegment(ctx: RenderCtx, seg: Segment, author?: string): Safe {
   switch (seg.kind) {
     case 'text':
       return html`<div class="reply${seg.final ? ' final' : ''}"><div class="md clamp" data-clamp>${renderMarkdown(seg.text)}</div><button type="button" class="more" hidden aria-expanded="false">Show more</button></div>`;
@@ -394,6 +403,7 @@ function renderSegment(ctx: RenderCtx, seg: Segment): Safe {
     case 'thinking':
       return html`<details class="thinking"><summary><span class="think-ico" aria-hidden="true">∴</span> Thinking <span class="muted">${plainPreview(seg.text, 90)}</span></summary><div class="md">${renderMarkdown(seg.text)}</div></details>`;
     case 'event': {
+      if (seg.subtype === 'midturn') return midTurnSegment(seg, author);
       const label: Record<string, string> = {
         interrupt: 'Interrupted',
         compact_summary: 'Compaction summary',
@@ -495,7 +505,7 @@ ${t.from ? html`<div class="from-peer">Message from <strong>${t.from}</strong> (
 <div class="prompt">${renderPrompt(t.prompt)}</div>
 <div class="ai">
   <div class="ai-head"><span class="ai-dot" aria-hidden="true"></span><span>Claude</span>${t.model ? html`<span class="muted">${shortModel(t.model)}</span>` : ''}${toolCount ? html`<span class="muted">· ${plural(toolCount, 'tool call')}</span>` : ''}${dur ? html`<span class="muted">· ${dur}</span>` : ''}</div>
-  ${segs.length ? segs.map((s) => renderSegment(ctx, s)) : html`<div class="reply muted">(no response recorded)</div>`}
+  ${segs.length ? segs.map((s) => renderSegment(ctx, s, author)) : html`<div class="reply muted">(no response recorded)</div>`}
 </div>
 <footer class="turn-foot">
   ${chips.length ? html`<div class="chips">${chips}</div>` : ''}

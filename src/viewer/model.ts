@@ -320,6 +320,11 @@ export function buildPrModel(cwd: string, base: string, head: string, review: Re
           : [];
         const note = notes.get(t.index);
         const reply = t.finalResponse?.trim();
+        const midTurn = t.items.flatMap((i) =>
+          i.kind === 'event' && i.subtype === 'midturn'
+            ? [{ text: i.text, who: i.from ?? names.get(sl.sessionId) ?? 'you', fromAgent: !!i.from, ...(i.timestamp ? { at: i.timestamp } : {}) }]
+            : [],
+        );
         return {
           sessionId: sl.sessionId,
           turn: t.index,
@@ -334,6 +339,7 @@ export function buildPrModel(cwd: string, base: string, head: string, review: Re
           deletions: sumBy(turnFiles, (f) => f.deletions),
           toolCalls: t.items.filter((i) => i.kind === 'tool').length,
           rawHref: `/session/${encodeURIComponent(sl.sessionId)}#${anchorFor(sl.sessionId, t.index)}`,
+          ...(midTurn.length ? { midTurn } : {}),
         };
       }),
     };
