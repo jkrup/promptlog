@@ -150,7 +150,7 @@ async function renderScene(browser, id, timing, ctxData) {
       window.ENDS = ends;
       window.END = dur;
     },
-    timing,
+    { cues: timing.cues, ends: timing.ends, dur: timing.dur },
   );
   await page.addScriptTag({ content: OVERLAY });
   if (sc.setup) await sc.setup(page, ctxData);
@@ -319,6 +319,8 @@ async function main() {
   writeWav(path.join(BUILD, 'all.wav'), Buffer.concat(ORDER.map((id) => timings[id].pcm)));
   const out = path.join(OUT, 'promptlog-demo.mp4');
   execFileSync(FFMPEG, ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', path.join(BUILD, 'concat.txt'), '-i', path.join(BUILD, 'all.wav'), '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-af', 'volume=-1.5dB', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out]);
+  // a 720p copy for upload limits
+  execFileSync(FFMPEG, ['-v', 'error', '-y', '-i', out, '-vf', 'scale=1280:720:flags=lanczos', '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', path.join(OUT, 'promptlog-demo-720p.mp4')]);
   // captions file next to the video
   let srt = '', n = 0, off = 0;
   for (const id of ORDER) {
