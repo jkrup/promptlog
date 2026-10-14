@@ -69,6 +69,23 @@ function fakeGemini(reply: (n: number) => string = () => JSON.stringify(REPLY)):
 }
 
 describe('quotes are looked up in the real text', () => {
+  test('a quote from a message that arrived mid-turn is credited to whoever sent it', () => {
+    const input = inputFor();
+    const turn = input.items.find((i) => i.sessionId === A)!.turns.find((t) => t.index === 2)!;
+    turn.items.push({ kind: 'event', subtype: 'midturn', text: 'also please add a stop button for runs', from: 'Blog SEO audit' });
+    turn.items.push({ kind: 'event', subtype: 'midturn', text: 'and bump the versions while you are at it' });
+    const reply = {
+      summary: 'Stop button.',
+      changes: [
+        { title: 'A stop button', what: 'Adds one.', why: { turn: `${a8}#2`, from: 'ask', quote: 'please add a stop button for runs' }, alsoWhy: [{ turn: `${a8}#2`, from: 'ask', quote: 'bump the versions while you are at it' }], tried: [], turns: [`${a8}#2`], files: ['src/server.js'] },
+      ],
+    };
+    const v = verifyOverview(JSON.stringify(reply), input);
+    assert.equal(v.changes.length, 1);
+    assert.deepEqual([v.changes[0]!.why!.who, v.changes[0]!.why!.kind], ['Blog SEO audit', 'agent']);
+    assert.equal(v.changes[0]!.alsoWhy[0]!.kind, 'person');
+  });
+
   test('findVerbatim returns the exact span, allowing only whitespace, markdown marks and quote-mark differences', () => {
     const src = 'Added a `/rates` endpoint that uses **Node\'s** built-in `fetch`\n(no packages added).';
     assert.equal(findVerbatim(src, 'uses **Node\'s** built-in'), 'uses **Node\'s** built-in');

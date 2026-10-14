@@ -21,7 +21,7 @@ import { sessionMap } from './map.ts';
 import { aiTexts } from './turns.ts';
 import type { TurnNote } from './types.ts';
 
-export const OVERVIEW_VERSION = 1;
+export const OVERVIEW_VERSION = 2;
 
 /** Lines a turn wrote in the PR, per path. */
 export type FileCredit = Map<string, { additions: number; deletions: number }>;
@@ -204,6 +204,10 @@ export function overviewPrompt(input: OverviewInput, shown: TurnRef[], notes: Ma
     }
     const ask = clipMiddle(t.prompt.trim(), r.full ? (t.from ? 4000 : 3000) : 600);
     out.push('Request, word for word:', '"""', ask, '"""');
+    // Messages sent while Claude was working on this turn are requests too (quote them with from "ask").
+    for (const m of midTurn(t)) {
+      out.push(`Message that arrived while Claude was working, from ${m.from ? `another Claude session named "${m.from}"` : item.person}, word for word:`, '"""', clipMiddle(m.text.trim(), r.full ? 2000 : 400), '"""');
+    }
     const said = aiTexts(t).join('\n\n');
     if (said) out.push('Claude\'s words in this turn, word for word:', '"""', clipMiddle(said, r.full ? 3000 : 600), '"""');
     out.push('');
@@ -287,14 +291,23 @@ function resolveTurn(ctx: Ctx, raw: unknown): TurnRef | undefined {
   return found.length === 1 ? found[0] : undefined;
 }
 
-function sourcesOf(r: TurnRef, from: 'ask' | 'reply'): string[] {
-  return from === 'ask' ? [r.turn.prompt] : aiTexts(r.turn);
+/** Messages that arrived while Claude was working on the turn (src/core/transcript.ts). */
+function midTurn(t: Turn): { text: string; from?: string }[] {
+  return t.items.flatMap((i) => (i.kind === 'event' && i.subtype === 'midturn' ? [{ text: i.text, ...(i.from ? { from: i.from } : {}) }] : []));
 }
 
-function whoOf(ctx: Ctx, r: TurnRef, from: 'ask' | 'reply'): Pick<OverviewQuote, 'who' | 'kind'> {
+function sourcesOf(r: TurnRef, from: 'ask' | 'reply'): string[] {
+  return from === 'ask' ? [r.turn.prompt, ...midTurn(r.turn).map((m) => m.text)] : aiTexts(r.turn);
+}
+
+function whoOf(ctx: Ctx, r: TurnRef, from: 'ask' | 'reply', text?: string): Pick<OverviewQuote, 'who' | 'kind'> {
   if (from === 'reply') return { who: 'Claude', kind: 'claude' };
+  const person = ctx.input.items.find((i) => i.sessionId === r.sessionId)?.person ?? 'you';
+  // A quote from a message that arrived mid-turn belongs to whoever sent that message.
+  const mid = text && !findVerbatim(r.turn.prompt, text) ? midTurn(r.turn).find((m) => findVerbatim(m.text, text)) : undefined;
+  if (mid) return mid.from ? { who: mid.from, kind: 'agent' } : { who: person, kind: 'person' };
   if (r.turn.from) return { who: r.turn.from, kind: 'agent' };
-  return { who: ctx.input.items.find((i) => i.sessionId === r.sessionId)?.person ?? 'you', kind: 'person' };
+  return { who: person, kind: 'person' };
 }
 
 /**
@@ -333,7 +346,7 @@ function verifyQuote(ctx: Ctx, raw: unknown): OverviewQuote | null {
     ctx.dropped.quotes++;
     return null;
   }
-  return { sessionId: hit.ref.sessionId, turn: hit.ref.turn.index, from: hit.from, quote: hit.text, ...whoOf(ctx, hit.ref, hit.from) };
+  return { sessionId: hit.ref.sessionId, turn: hit.ref.turn.index, from: hit.from, quote: hit.text, ...whoOf(ctx, hit.ref, hit.from, hit.text) };
 }
 
 /** A path from the model, if the PR changes it: exact, else the one PR path that ends with it. */
