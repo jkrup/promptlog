@@ -182,13 +182,16 @@ test('gray zone: Clef says independent (>= 70%) -> both proceed, with a heads-up
   assert.equal((await claimJudged(memStore(t), B, edit('return rates.map'), { judge: clef })).refused.length, 0);
   assert.equal(clef.calls, 1);
   assert.equal(t.decisions.length, 1);
+  // A new ask is a new question.
+  await claimJudged(memStore(t), { ...B, ask: 'rename formatRates to showRates' }, edit('return rates.map'), { judge: clef });
+  assert.equal(clef.calls, 2);
 });
 
 test('gray zone: conflicting, unsure, or independent under 70% -> refused with the verdict', async () => {
   for (const [choice, p, words] of [
     ['conflicting', 0.8, 'Clef: getRates() and formatRates() conflict (80%) → the second agent waited'],
-    ['unsure', 0.6, 'Clef: not sure getRates() and formatRates() are independent (unsure 60%, independent 20%) → the second agent waited, to be safe'],
-    ['independent', 0.65, 'Clef: not sure getRates() and formatRates() are independent (independent 65%, under 70%) → the second agent waited, to be safe'],
+    ['unsure', 0.6, 'Clef: not sure getRates() and formatRates() are independent (only 20%, needs 70%) → the second agent waited, to be safe'],
+    ['independent', 0.65, 'Clef: not sure getRates() and formatRates() are independent (only 65%, needs 70%) → the second agent waited, to be safe'],
   ] as const) {
     const t = table();
     claimOf(t, A, edit('return RATES[cur];'));

@@ -184,8 +184,7 @@ export function describeDecision(d: Decision): string {
   const p = d.probabilities ?? {};
   if (d.outcome === 'allowed') return `${judgeName(d)}: ${pair} are independent (${pct(p.independent)}) → both agents kept working`;
   if (d.choice === 'conflicting') return `${judgeName(d)}: ${pair} conflict (${pct(p.conflicting)}) → the second agent waited`;
-  const odds = d.choice === 'independent' ? `independent ${pct(p.independent)}, under ${pct(ALLOW_AT)}` : `${d.choice} ${pct(p[d.choice])}, independent ${pct(p.independent)}`;
-  return `${judgeName(d)}: not sure ${pair} are independent (${odds}) → the second agent waited, to be safe`;
+  return `${judgeName(d)}: not sure ${pair} are independent (only ${pct(p.independent)}, needs ${pct(ALLOW_AT)}) → the second agent waited, to be safe`;
 }
 
 /** Add a decision to the log (the last MAX_DECISIONS). A repeat of the last one for the same blocks just updates it. */
@@ -200,10 +199,10 @@ export function logDecision(t: Table, d: Decision): void {
   if (t.decisions.length > MAX_DECISIONS) t.decisions.splice(0, t.decisions.length - MAX_DECISIONS);
 }
 
-/** A recent real verdict on the same two blocks. */
-function reusable(t: Table, key: string, now: number): Decision | undefined {
+/** A recent real verdict on the same two blocks, given while both sessions were on the same asks as now. */
+function reusable(t: Table, key: string, now: number, asks: Record<string, string | undefined>): Decision | undefined {
   const d = t.decisions.findLast((x) => decisionKey(x) === key);
-  if (!d?.choice) return undefined;
+  if (!d?.choice || ![d.asker, d.holder].every((x) => (asks[x.sessionId] ?? '') === (x.ask ?? ''))) return undefined;
   return now - Date.parse(d.at) < (d.outcome === 'allowed' ? REUSE_ALLOWED_MS : REUSE_REFUSED_MS) ? d : undefined;
 }
 
@@ -279,7 +278,7 @@ export function claimIn(t: Table, holder: Holder, req: ClaimRequest, now: number
         seen.add(key);
         const quietMs = now - Date.parse(l.touchedAt ?? l.since);
         const given = opts.verdicts?.[key];
-        const known = given ?? reusable(t, key, now);
+        const known = given ?? reusable(t, key, now, { [holder.sessionId]: holder.ask, [l.sessionId]: l.ask });
         if (same && quietMs < staleMs && known?.outcome !== 'allowed') {
           no.push({ ...l, wanted: w.block });
           continue;
