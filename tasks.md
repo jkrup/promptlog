@@ -122,6 +122,9 @@ Follow-ups:
 - [x] Linking a fork's captured session to its parent (`SessionMeta.parent`)
 - [x] Bug: `queue-operation` lines leaked the next prompt into turn N (fixed in splitByTurn)
 - [x] Messages sent while Claude was working (by the person or another session) show inside the turn they landed in: PR card, session page, `show`, summarizer input
+- [x] Leases per block of code (src/capture/blocks.ts): an Edit holds the function it lands in; neighbours go to Clef-flash in the LeaseRoom Durable Object (lease-judge.ts), verdicts on `/leases`
+- [ ] Leases: the end of a turn holds a changed file whole when the session held nothing in it (unusual Bash); it could hold the changed blocks from the snapshot diff instead
+- [ ] Leases: the brace scanner doesn't understand regex literals (a `{` inside `/[{]/` shifts the blocks below it)
 - [ ] A subagent's report that arrives while the session is idle (user entry, `origin.kind: 'peer'`, `handback: true`) becomes its own turn "from another Claude session"; it's the session's own helper, not a peer (138 such turns across 20 local transcripts). Fixing it renumbers later turns, so stored sessions need a rebuild
 - [ ] An interrupted turn loses its before-snapshot when the next prompt arrives
 - [ ] `git commit --amend -m` drops the `Promptlog:` trailer

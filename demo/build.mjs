@@ -288,8 +288,11 @@ async function main() {
   const lease = (() => {
     const deny = path.join(BUILD, 'lease', 'deny.json');
     if (!fs.existsSync(deny)) return null;
+    const clef = path.join(BUILD, 'lease', 'clef.json');
+    const next = fs.existsSync(clef) && fs.statSync(clef).size ? JSON.parse(fs.readFileSync(clef, 'utf8')).hookSpecificOutput : {};
     return {
       reason: JSON.parse(fs.readFileSync(deny, 'utf8')).hookSpecificOutput.permissionDecisionReason,
+      headsUp: next.additionalContext ?? next.permissionDecisionReason ?? '',
       table: fs.readFileSync(path.join(BUILD, 'lease', 'leases.txt'), 'utf8').trimEnd(),
     };
   })();

@@ -237,15 +237,16 @@ export const SCENES = {
     setup: async (page, { lease }) => {
       await page.evaluate((d) => {
         document.getElementById('deny').textContent = d.reason;
+        document.getElementById('headsup').textContent = d.headsUp;
         document.getElementById('leases').textContent = d.table;
       }, lease);
     },
     sentences: [
-      'New: many agents on one repo, without collisions.',
-      { say: 'Two agents, one file. Agent A is adding a cache. It edits server dot J S first, so it holds a lease on that file.', cap: 'Two agents, one file. Agent A is adding a cache. It edits server.js first, so it holds a lease on that file.' },
-      { say: "Agent B, in another worktree, tries to edit the same file. Prompt log's hook stops the edit, and tells it who holds the file, on which branch, and what they were asked.", cap: "Agent B, in another worktree, tries to edit the same file. promptlog's hook stops the edit, and tells it who holds the file, on which branch, and what they were asked." },
-      'So agent B works on something else first, or messages the other agent.',
-      { say: 'Prompt log leases shows who holds what. A lease ends when its session ends, or after fifteen quiet minutes. And leases are shared across every worktree of the repo.', cap: '`promptlog leases` shows who holds what. A lease ends when its session ends, or after 15 quiet minutes. And leases are shared across every worktree of the repo.' },
+      'New: many agents on one repo, even in one file, without collisions.',
+      { say: 'Agent A is adding a cache. It edits get rates in server dot J S, so it holds a lease on just that function.', cap: 'Agent A is adding a cache. It edits getRates() in server.js, so it holds a lease on just that function.' },
+      { say: "Agent B, in another worktree, edits health in the same file. That's allowed. Then it tries get rates. Prompt log's hook stops that edit, and tells it who holds the function, on which branch, and what they were asked.", cap: "Agent B, in another worktree, edits health() in the same file. That's allowed. Then it tries getRates(). promptlog's hook stops that edit, and tells it who holds the function, on which branch, and what they were asked." },
+      { say: 'Next, B edits format rates, right under get rates. That is a gray zone, so Clef asks one narrow question: are the two changes independent? Yes, seventy five percent, so B goes ahead, with a heads-up about its neighbour.', cap: 'Next, B edits formatRates(), right under getRates(). That is a gray zone, so Clef asks one narrow question: are the two changes independent? Yes (75%), so B goes ahead, with a heads-up about its neighbour.' },
+      { say: 'Prompt log leases shows who holds which functions, and every Clef decision. Leases end when a session ends, or after fifteen quiet minutes, and they are shared across worktrees and machines.', cap: '`promptlog leases` shows who holds which functions, and every Clef decision. Leases end when a session ends, or after 15 quiet minutes, and they are shared across worktrees and machines.' },
     ],
     tail: 1.2,
   },
