@@ -198,19 +198,24 @@ h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; m
 .quote-line q { color: var(--ink); font-weight: 600; }
 
 /* ---------- leases ---------- */
-.lease-facts { align-self: start; }
-.lease-facts code, .req code { white-space: nowrap; }
+.cases { margin-top: 36px; display: grid; gap: 14px; }
+@media (min-width: 900px) { .cases { grid-template-columns: repeat(3, 1fr); gap: 18px; } }
+.case { padding: 20px 20px 18px; display: grid; gap: 8px; align-content: start; }
+.case h3 { font-size: 20px; line-height: 1.2; }
+.case p { font-size: 15.5px; color: var(--ink-2); }
+.case code, .verdicts code, .lease-facts code { font-size: .88em; }
+.case .case-k { font: 600 11.5px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; }
+.ok-k { color: var(--add) !important; } .no-k { color: var(--del) !important; } .ask-k { color: var(--brand) !important; }
+@media (min-width: 960px) { .split.lease-split { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; } }
+.lease-left { display: grid; gap: 22px; align-content: start; }
+.mini-h { font-size: 20px; }
+.verdicts { list-style: none; margin: -8px 0 0; padding: 0; display: grid; gap: 12px; }
+.verdicts li { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--add); display: grid; gap: 6px; }
+.verdicts li.v-no { border-left-color: var(--del); }
+.v-what { font-size: 15.5px; color: var(--ink); }
+.v-out { font: 400 13.5px/1.5 var(--f-mono); color: var(--ink-2); }
 .lease-facts code { white-space: normal; overflow-wrap: anywhere; }
 .lease-facts code.blk { display: block; width: fit-content; max-width: 100%; margin-top: 8px; padding: 6px 9px; }
-.lease-demo { display: grid; gap: 12px; min-width: 0; }
-.tool { overflow: hidden; border-left: 3px solid var(--del); }
-.tool-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
-.tool-name { font: 600 13px/1 var(--f-mono); padding: 5px 8px; border-radius: 6px; background: var(--sunk); }
-.tool-head .mono { font-size: 13.5px; color: var(--ink-2); }
-.refused { margin-left: auto; font: 600 11px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--del); background: var(--del-bg); padding: 5px 8px; border-radius: 99px; }
-.tool-out { margin: 0; padding: 14px; background: var(--code); font: 400 13.5px/1.6 var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
-.lease-cap { font-size: 14px; color: var(--muted); margin: -2px 0 6px 2px; }
-.lease-demo .term pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
 
 /* ---------- video slot ---------- */
 .video { padding-top: 0; }
@@ -266,6 +271,7 @@ h2 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.06; font-weight: 700; m
 .req { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; font-size: 16px; color: var(--ink-2); }
 .req li { padding-left: 18px; position: relative; }
 .req li::before { content: ''; position: absolute; left: 0; top: .62em; width: 7px; height: 7px; border-radius: 2px; background: var(--brand); }
+.req:not(.lease-facts) code { white-space: nowrap; }
 .req code { font-size: 14px; background: var(--surface); border: 1px solid var(--line); padding: 1px 5px; border-radius: 5px; }
 
 .qs-side { display: grid; gap: 24px; }
@@ -541,31 +547,58 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
 <section id="leases" aria-labelledby="leases-h" style="padding-top:24px">
   <div class="wrap">
     <p class="kicker">Many agents, one repo</p>
-    <h2 id="leases-h">Leases: two agents never edit the same file at once.</h2>
-    <p class="lede">Before an agent changes a file, promptlog claims it. If another live agent session holds that file, the edit is refused, and the agent is told who holds it: their branch, what they were asked, and when they were last active. So it works on something else, or messages that agent. On one machine the table is shared by every worktree; across machines it lives in a Cloudflare Durable Object, so agents on different laptops see each other too.</p>
-    <div class="split flip">
-      <ul class="req lease-facts">
-        <li>One machine: shared across every worktree of the repo, so parallel agents in separate worktrees see each other.</li>
-        <li>Many machines: one Durable Object per repo holds the table. Join a clone, with the repo’s lease key: <code class="blk">promptlog connect --leases &lt;worker-url&gt;</code></li>
-        <li>Renewed by activity. A lease expires after 15 quiet minutes, and ends when its session ends.</li>
-        <li>Covers Claude’s Edit and Write tools, and Bash commands that write files.</li>
-        <li><code>promptlog leases</code> lists who holds what. The review Worker’s <code>/leases</code> page shows the same in a browser: <a href="https://promptlog-viewer.mazlix-f8e.workers.dev/leases?repo=promptlog-demo">the demo repo’s page</a>.</li>
-      </ul>
-      <div class="lease-demo">
-        <div class="tool card">
-          <div class="tool-head"><span class="tool-name">Edit</span><span class="mono">src/server.js</span><span class="refused">refused</span></div>
-          <pre class="tool-out">promptlog lease: another agent is working on this file right now, so this edit was not made.
-- src/server.js: held by another agent session (aaaaaaaa) on branch feature/rates, active just now, working on: "add a per-currency cache to getRates"</pre>
-        </div>
-        <p class="lease-cap">What the second agent reads instead of making the edit.</p>
-        <div class="term">
-          <div class="term-head"><span>terminal</span></div>
-<pre><span class="p">$ </span>promptlog leases
-<span class="ok">session aaaaaaaa on feature/rates, active 0 min ago: "add a per-currency cache to getRates"
-  src/server.js</span>
-<span class="cm">(leases end when a session ends, or after 15 min without activity)</span></pre>
-        </div>
+    <h2 id="leases-h">Leases: agents share a file, not a function.</h2>
+    <p class="lede">Before an agent edits code, promptlog claims the block the edit lands in: the function, method or declaration around it. Other agents can keep working in the rest of the file.</p>
+
+    <div class="cases">
+      <div class="case card">
+        <p class="case-k ok-k">Different functions</p>
+        <h3>Both go ahead</h3>
+        <p>One agent in <code>getRates()</code>, another in <code>health()</code> of the same file. Neither waits.</p>
       </div>
+      <div class="case card">
+        <p class="case-k no-k">Same function</p>
+        <h3>Refused, with who and why</h3>
+        <p>The second agent’s edit is not made. It is told who holds the function, on which branch, what they were asked and when they were last active, so it works on something else or messages that agent.</p>
+      </div>
+      <div class="case card">
+        <p class="case-k ask-k">Right next to each other</p>
+        <h3>Clef-flash decides</h3>
+        <p>Blocks within 3 lines of each other go to Clef-flash, inside the Durable Object. “Independent” at 70% or more lets the edit through. Anything less, and it waits.</p>
+      </div>
+    </div>
+
+    <div class="split lease-split">
+      <div class="lease-left">
+        <h3 class="mini-h">Two real verdicts from testing</h3>
+        <ul class="verdicts">
+          <li class="v-ok">
+            <p class="v-what"><code>getRates()</code> gets a cache; <code>formatRates()</code> changes its rounding.</p>
+            <p class="v-out">Clef: getRates() and formatRates() are independent (75%) → both agents kept working</p>
+          </li>
+          <li class="v-no">
+            <p class="v-what"><code>getRates()</code> starts returning a plain number; <code>formatRates()</code> reads <code>.base</code> and <code>.rate</code> from it.</p>
+            <p class="v-out">Independent 46%, conflicting 43%: below the 70% bar, so the second agent waited. That was a real conflict.</p>
+          </li>
+        </ul>
+        <ul class="req lease-facts">
+          <li>Every verdict is listed under “Decisions” on the <code>/leases</code> page: <a href="https://promptlog-viewer.mazlix-f8e.workers.dev/leases?repo=promptlog-demo">the demo repo’s page</a>.</li>
+          <li>Writes through Bash, and whole-file writes, still hold the whole file.</li>
+          <li>One machine: the table is shared by every worktree. Many machines: one Durable Object per repo holds it. Join a clone, with the repo’s lease key: <code class="blk">promptlog connect --leases &lt;worker-url&gt;</code></li>
+          <li>Renewed by activity. A lease ends with its session, or after 15 quiet minutes. <code>promptlog leases</code> lists who holds what.</li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <a class="frame" href="img/leases-light.webp">
+          <picture>
+            <source srcset="img/leases-m-dark.webp" media="(max-width: 640px) and (prefers-color-scheme: dark)" width="800" height="2062">
+            <source srcset="img/leases-m-light.webp" media="(max-width: 640px)" width="800" height="2062">
+            <source srcset="img/leases-dark.webp" media="(prefers-color-scheme: dark)" width="1880" height="1530">
+            <img src="img/leases-light.webp" width="1880" height="1530" loading="lazy" decoding="async" alt="The public leases page for promptlog-demo: two agent sessions working in one file. Session bbbbbbbb on feature/format holds formatRates() and health() in src/server.js; session aaaaaaaa on feature/rates holds getRates(). Under Decisions: Clef: getRates() and formatRates() are independent (75%), both agents kept working.">
+          </picture>
+        </a>
+        <figcaption><b>The <code>/leases</code> page</b> on the review Worker: two agents in one file, each holding its own functions, and Clef’s decision.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
@@ -588,7 +621,7 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
         <div class="node cfn ai">
           <p class="k">Durable Object</p>
           <h3>Leases</h3>
-          <p>One per repo. Before each edit, an agent claims the file here, from any machine.</p>
+          <p>One per repo. Before each edit, an agent claims the function it edits here, from any machine. Clef-flash judges close calls.</p>
         </div>
       </div>
       <div class="edge"><span>commit + push</span></div>
@@ -630,7 +663,7 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
       </div>
       <div class="note-item">
         <h3>Leases in a Durable Object</h3>
-        <p>One Durable Object per repo holds the lease table, so agents on different machines share it. The <code>/leases</code> page shows who’s working on what.</p>
+        <p>One Durable Object per repo holds the lease table, so agents on different machines share it. It asks Clef-flash when two edits sit right next to each other. The <code>/leases</code> page shows who’s working on what, and every decision.</p>
       </div>
       <div class="note-item">
         <h3>AI without keys</h3>
