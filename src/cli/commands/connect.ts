@@ -1,9 +1,11 @@
-// promptlog connect [--name <repo>] [--namespace <ns>] [--no-backfill]
+// promptlog connect [--name <repo>] [--namespace <ns>] [--no-backfill] [--leases <worker-url> --leases-key <key>]
 //
 // One command from a plain folder to review-ready:
 //   1. git init if needed, and promptlog's hooks (Claude Code + git)
 //   2. a private Cloudflare Artifacts repo named after the folder, unless an `artifacts` remote already exists
 //      (wrangler creates it; a 90-day write token goes to git's credential store, never to the screen or the repo config)
+//   2b. with --leases: this clone's agents share the repo's lease table on the review Worker (cloud/viewer) with agents
+//      on other machines; the key goes to the macOS Keychain (elsewhere: git config promptlog.leasesKey)
 //   3. import the Claude Code sessions this folder already has, linked to the commits they made
 //   4. push every branch and the sessions; from then on each commit pushes itself (see src/capture/mirror.ts)
 import { spawnSync } from 'node:child_process';
@@ -11,10 +13,11 @@ import { platform } from 'node:os';
 import { basename } from 'node:path';
 import { gitMaybe, repoRoot } from '../../core/git.ts';
 import { backfill } from '../../capture/backfill.ts';
+import { checkSharedLeases, useSharedLeases } from '../../capture/leases.ts';
 import { PUSH_REFSPEC } from '../../capture/sync.ts';
 import { run as install } from './install.ts';
 
-const USAGE = 'usage: promptlog connect [--name <repo>] [--namespace <ns>] [--no-backfill]\n';
+const USAGE = 'usage: promptlog connect [--name <repo>] [--namespace <ns>] [--no-backfill] [--leases <worker-url> --leases-key <key>]\n';
 const REMOTE = 'artifacts';
 const TOKEN_TTL_S = 90 * 24 * 3600;
 /** Artifacts includes 1 GB of storage; leave room for the sessions. */
@@ -31,6 +34,11 @@ export async function run(args: string[]): Promise<number> {
     process.stdout.write(USAGE);
     return 0;
   }
+  const leases = opt(args, '--leases');
+  const leasesKey = opt(args, '--leases-key') ?? process.env.PROMPTLOG_LEASES_KEY;
+  if (leases && !leasesKey) {
+    return fail("--leases needs the repo's lease key too (--leases-key <key>). Open the review page's /leases with your view key: it shows the full command.");
+  }
   const cwd = process.cwd();
   let root = repoRoot(cwd);
   if (!root) {
@@ -45,10 +53,13 @@ export async function run(args: string[]): Promise<number> {
 
   // 2. The review repo.
   const remotes = (gitMaybe(['remote'], { cwd: root }) ?? '').split('\n');
+  let repoName = (opt(args, '--name') ?? basename(root)).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63);
   if (remotes.includes(REMOTE)) {
     say(`Using the existing "${REMOTE}" remote.`);
+    const existing = /([^/]+?)(?:\.git)?\/?$/.exec(gitMaybe(['remote', 'get-url', REMOTE], { cwd: root }) ?? '')?.[1];
+    if (existing) repoName = existing;
   } else {
-    const name = (opt(args, '--name') ?? basename(root)).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63);
+    const name = repoName;
     const ns = opt(args, '--namespace') ?? 'promptlog';
     if (!name) return fail('pick a repo name with --name');
     const branch = gitMaybe(['symbolic-ref', '--short', '-q', 'HEAD'], { cwd: root }) ?? 'main';
@@ -65,6 +76,12 @@ export async function run(args: string[]): Promise<number> {
     gitMaybe(['remote', 'add', REMOTE, url.toString()], { cwd: root });
     storeCredential(root, url, token);
     say(`${created ? 'Created' : 'Connected to'} the private repo "${name}" on Cloudflare Artifacts (login saved until ${String(tok?.expires_at ?? '').slice(0, 10) || 'it expires'}).`);
+  }
+
+  // 2b. The lease table shared with agents on other machines.
+  if (leases && leasesKey) {
+    const r = connectLeases(root, leases, repoName, leasesKey);
+    if (r !== 0) return r;
   }
 
   // 3. Past sessions.
@@ -100,6 +117,30 @@ export async function run(args: string[]): Promise<number> {
   }
   if (push.status !== 0) return fail(`first push failed: ${push.stderr.trim()}`);
   say(`Pushed ${heads.split('\n').length} branch(es) (${(big.total / 1e6).toFixed(0)} MB). From now on every commit pushes itself.`);
+  return 0;
+}
+
+/**
+ * Point this clone's leases at the review Worker. `url` is the Worker (…workers.dev) or the table itself
+ * (…/__leases/<repo>); the per-repo key is shown on the Worker's /leases page to people who have the view key.
+ */
+function connectLeases(root: string, url: string, repoName: string, key: string): number {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return fail(`--leases needs the review Worker's URL, e.g. https://promptlog-viewer.<you>.workers.dev (got "${url}")`);
+  }
+  if (!u.pathname.includes('/__leases/')) u = new URL(`/__leases/${repoName}`, u.origin);
+  const table = u.origin + u.pathname.replace(/\/+$/, '');
+  const where = useSharedLeases(root, table, key);
+  const check = checkSharedLeases(root);
+  if ('error' in check) {
+    say(`Saved the shared lease table (${table}, key in the ${where}), but it didn't answer: ${check.error}. Agents use this machine's own table until it does.`);
+    return 0;
+  }
+  say(`Agents here now share leases with other machines through ${u.origin} (${check.leases.length} file(s) held right now; key saved in the ${where}).`);
+  say(`See who's working on what: ${u.origin}/leases?repo=${table.split('/').pop()}`);
   return 0;
 }
 

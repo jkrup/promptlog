@@ -2,7 +2,7 @@
 // promptlog leases release <path>…  free files (whoever holds them), e.g. after a session crashed
 // promptlog leases release --all    free everything
 import { repoRoot } from '../../core/git.ts';
-import { leaseTtlMs, listLeases, release, repoPath } from '../../capture/leases.ts';
+import { leaseTtlMs, listLeases, release, repoPath, sharedLeasesUrl } from '../../capture/leases.ts';
 
 const USAGE = 'usage: promptlog leases [release <path>… | release --all] [--json]\n';
 
@@ -45,5 +45,7 @@ export async function run(args: string[]): Promise<number> {
     for (const x of ls) process.stdout.write(`  ${x.path}\n`);
   }
   process.stdout.write(`(leases end when a session ends, or after ${Math.round(leaseTtlMs() / 60_000)} min without activity)\n`);
+  const shared = sharedLeasesUrl(root);
+  if (shared) process.stdout.write(`(shared with agents on other machines: ${shared.replace('/__leases/', '/leases?repo=')})\n`);
   return 0;
 }

@@ -56,6 +56,12 @@ Needs a Cloudflare account on Workers Paid, and wrangler logged in (`npx wrangle
    ```
    `REPO` in `cloud/viewer/wrangler.jsonc` is the default repo; `?repo=<name>` switches to another repo in the namespace. PR pages are `/review?base=main&head=<branch>`.
    After a deploy, the Container keeps its old image until it restarts: open `/__restart` (with the key) once the new image has rolled out.
+3. **Agents on several machines share leases.** By default, leases (an agent can't edit a file another live session holds) cover the worktrees of one machine. To cover every machine working on the repo, point each clone at the Worker:
+   ```sh
+   promptlog connect --no-backfill --leases https://promptlog-viewer.<you>.workers.dev --leases-key <key>
+   ```
+   The key is per repo. Open `/leases?repo=<name>` on the review page (with your view key) and copy the full command from there. On a Mac the key goes to the Keychain; elsewhere to `git config promptlog.leasesKey`. The table lives in a Durable Object, one per repo. `/leases` shows who's working on what: each agent session, its branch, what it was asked, and the files it holds. If the Worker doesn't answer within 1.5 seconds, agents use the machine's own table for a minute and log the problem to `.git/promptlog/errors.log`. They are never blocked.
+4. **A public demo.** `PUBLIC_REPOS` in `wrangler.jsonc` lists repos anyone can open without the key. Visitors can only read pages: no asks, no AI, no restarts. Every other repo still needs the key. The bundled demo is published that way: [the PR page for `feature/rates`](https://promptlog-viewer.mazlix-f8e.workers.dev/review?base=main&head=feature%2Frates&repo=promptlog-demo).
 
 ## Develop
 

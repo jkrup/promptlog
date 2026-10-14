@@ -1,5 +1,5 @@
 // Synthetic Claude Code transcripts and hook drivers for capture/store tests.
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -12,6 +12,16 @@ export function sh(cwd: string, cmd: string, args: string[], input?: string): st
   return execFileSync(cmd, args, { cwd, input, stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf8' }).replace(/\n$/, '');
 }
 export const gitc = (cwd: string, ...args: string[]) => sh(cwd, 'git', args);
+
+/** test/lease-server.ts in a child process: a stand-in for the lease table on Cloudflare. */
+export async function leaseServer(key: string, ...flags: string[]): Promise<{ url: string; stop: () => void }> {
+  const child = spawn(process.execPath, ['--no-warnings', join(ROOT, 'test/lease-server.ts'), key, ...flags], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const port = await new Promise<string>((ok, fail) => {
+    child.stdout.once('data', (d) => ok(String(d).trim()));
+    child.once('exit', (code) => fail(new Error(`lease server exited (${code})`)));
+  });
+  return { url: `http://127.0.0.1:${port}`, stop: () => child.kill() };
+}
 
 /** Run `bin/promptlog` with stdin; returns status and output. */
 export function pl(cwd: string, args: string[], input = '', env: Record<string, string> = {}) {
