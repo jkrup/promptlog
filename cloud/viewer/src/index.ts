@@ -7,6 +7,7 @@
 // repos (PUBLIC_REPOS, e.g. a demo) that anyone can read without the key: GET pages only, and no AI.
 import { Container } from '@cloudflare/containers';
 import { aiKey, handleAi, type AiEnv } from './ai.ts';
+import { withDemoGuide } from './demo-guide.ts';
 import { handleLeaseApi, leasesPage, type LeaseEnv } from './leases.ts';
 
 export { LeaseRoom } from './leases.ts';
@@ -138,13 +139,15 @@ export default {
     headers.set('x-artifacts-token', token);
     // A public repo's container gets the AI key only to write its own summaries (the overview and per-turn notes, read
     // with GET). Its content is fixed and those results are cached, so a visitor can't spend more than one write each.
-    // Asks (POST) stay refused above, and /__ai/* needs the key.
-    const summaryRead = req.method === 'GET' && (url.pathname === '/api/overview' || url.pathname === '/api/glance');
+    // The page itself (/review) needs it too: it only offers the overview when a text model is set up. Asks (POST)
+    // stay refused above, and /__ai/* needs the key.
+    const summaryRead = req.method === 'GET' && ['/review', '/api/overview', '/api/glance'].includes(url.pathname);
     if (!isPublic(env, name) || summaryRead) {
       headers.set('x-ai-base', `${url.origin}/__ai`);
       headers.set('x-ai-key', await aiKey(env.VIEW_KEY));
     }
-    const res = await container.fetch(new Request(req, { headers }));
+    let res = await container.fetch(new Request(req, { headers }));
+    if (isPublic(env, name) && req.method === 'GET' && url.pathname === '/review') res = withDemoGuide(res, name);
     if (pick === null) return res;
     // A public visitor came with ?repo=: serve the page itself, and remember the repo so its links stay on it.
     const out = new Response(res.body, res);
