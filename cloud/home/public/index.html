@@ -630,12 +630,12 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
         <h3>Private git repo</h3>
         <p>One per folder. Branches, and the conversation behind every commit.</p>
       </div>
-      <div class="edge"><span>push event</span></div>
+      <div class="edge"><span>read on open</span></div>
       <div class="worker-col">
         <div class="node cfn">
-          <p class="k">Queue → Worker</p>
+          <p class="k">Workers + Containers</p>
           <h3>Worker + Container</h3>
-          <p>The Worker reads the repo; a Container runs the viewer. Push events go to a Queue.</p>
+          <p>The Worker reads the repo; a Container runs the viewer.</p>
         </div>
         <div class="ai-link" aria-hidden="true"></div>
         <div class="node cfn ai">
@@ -659,7 +659,7 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
       </div>
       <div class="note-item">
         <h3>A commit is the trigger</h3>
-        <p>Every commit pushes itself to Artifacts in the background. The review page reads the newest version when you open it. Artifacts push events are wired to a Queue for live updates.</p>
+        <p>Every commit pushes itself to Artifacts in the background. The review page reads the newest version when you open it.</p>
       </div>
       <div class="note-item">
         <h3>Leases in a Durable Object</h3>

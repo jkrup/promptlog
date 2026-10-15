@@ -13,7 +13,7 @@ Built for Cloudflare's "Build the next GitHub" challenge, on Cloudflare **Worker
 - **Many agents, one review.** Sessions that message each other (Claude Code peer messages) show up as turns from that agent. Each agent's commits arrive with their reasons.
 - **Many agents, one file.** Before an agent edits code, it takes a lease on the function it is about to change (or the class method, or the declaration). Another agent can work on a different function of the same file at the same time. The same function is refused, and the agent is told who holds it, on which branch, and what they were asked. When two agents want functions right next to each other, Clef-flash answers one narrow question: are the two changes independent? Only a clear yes (70% or more) lets the second agent in, with a heads-up about its neighbour. Every verdict is kept and shown on `/leases`.
 - **Every line knows its turn.** The PR page credits each changed line to the turn that wrote it: from exact before/after snapshots when recorded live, otherwise from the code inside that turn's own tool calls (agents often edit through Bash scripts). On a real 1,121-line PR, 96% of lines are traced.
-- **Hosted on Cloudflare.** A Worker serves the review page from the Artifacts repo (via a Container running the viewer). Artifacts push events go to a Queue. Workers AI writes summaries (DeepSeek) and makes small typed decisions (Clef-flash), with no API keys in the container.
+- **Hosted on Cloudflare.** A Worker serves the review page from the Artifacts repo (via a Container running the viewer). Workers AI writes summaries (DeepSeek) and makes small typed decisions (Clef-flash), with no API keys in the container.
 
 ## Quick start (local)
 
