@@ -8,7 +8,7 @@ Usage: promptlog <command> [args]
 
 Capture
   connect [--name <repo>]    Set up a folder in one go: git, hooks, a private Cloudflare Artifacts repo, this
-                             folder's past Claude Code sessions, and a first push. Then every commit pushes itself
+                             folder's past Claude Code sessions, and a first push. Then promptlog pushes every commit
   install [--user] [--auto-push]  Install Claude Code hooks (repo-local .claude/settings.local.json by default)
                              and git hooks for commit trailers (--auto-push: also push sessions on git push)
   hook <Event>               (internal) handle a Claude Code hook event; reads JSON on stdin

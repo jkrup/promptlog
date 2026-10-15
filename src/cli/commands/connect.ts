@@ -7,7 +7,7 @@
 //   2b. with --leases: this clone's agents share the repo's lease table on the review Worker (cloud/viewer) with agents
 //      on other machines; the key goes to the macOS Keychain (elsewhere: git config promptlog.leasesKey)
 //   3. import the Claude Code sessions this folder already has, linked to the commits they made
-//   4. push every branch and the sessions; from then on each commit pushes itself (see src/capture/mirror.ts)
+//   4. push every branch and the sessions; from then on promptlog pushes each commit (see src/capture/mirror.ts)
 import { spawnSync } from 'node:child_process';
 import { platform } from 'node:os';
 import { basename } from 'node:path';
@@ -116,7 +116,7 @@ export async function run(args: string[]): Promise<number> {
     spawnSync('sleep', [String(3 * attempt)]);
   }
   if (push.status !== 0) return fail(`first push failed: ${push.stderr.trim()}`);
-  say(`Pushed ${heads.split('\n').length} branch(es) (${(big.total / 1e6).toFixed(0)} MB). From now on every commit pushes itself.`);
+  say(`Pushed ${heads.split('\n').length} branch(es) (${(big.total / 1e6).toFixed(0)} MB). From now on promptlog pushes every commit.`);
   return 0;
 }
 

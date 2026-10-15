@@ -1,18 +1,22 @@
 // Builds the promptlog demo video.
 //   node demo/build.mjs                 narrate + render every scene, then assemble
 //   node demo/build.mjs review-t13 arch only (re)render these scenes, then assemble
-//   node demo/build.mjs --assemble      only assemble existing segments
+//   node demo/build.mjs --assemble      only assemble existing segments (full cut + short cut)
+//   node demo/build.mjs --short         only assemble the short cut from existing segments
+//   node demo/build.mjs --timings       narrate only, print each scene's length and the totals, no video
 //   node demo/build.mjs --stills        one PNG per narrated sentence (quick look), no video
-// Needs: macOS `say`, ffmpeg, the Playwright chromium-1243 cache, and for the live scenes the viewer:
+// Needs: macOS `say` (or CONFIG.voice 'gemini:<voice>', which calls Gemini TTS over HTTPS and costs money),
+// ffmpeg, the Playwright chromium-1243 cache, and for the live scenes the viewer:
 //   node demo/serve.ts <clone-of-browser-use> 4812   (demo/render.sh sets that up and runs this)
 // Every frame is rendered deterministically (set time t, screenshot), so timing matches narration exactly.
 import { chromium } from 'playwright';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
-import { CONFIG, ORDER, SCENES } from './script.mjs';
+import { CONFIG, ORDER, SHORT, SCENES } from './script.mjs';
 
 const DIR = path.dirname(new URL(import.meta.url).pathname);
 const BUILD = path.join(DIR, 'build');
@@ -29,6 +33,8 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const args = process.argv.slice(2);
 const assembleOnly = args.includes('--assemble');
+const shortOnly = args.includes('--short');
+const timingsOnly = args.includes('--timings');
 const stills = args.includes('--stills');
 const only = args.filter((a) => !a.startsWith('--'));
 for (const id of only) if (!SCENES[id]) throw new Error(`unknown scene: ${id}`);
@@ -36,35 +42,79 @@ for (const id of only) if (!SCENES[id]) throw new Error(`unknown scene: ${id}`);
 // ---------- narration ----------
 const norm = (s) => (typeof s === 'string' ? { say: s, cap: s } : s);
 
-function tts(text) {
-  const key = createHash('sha1').update(`${CONFIG.voice}|${CONFIG.rate}|${text}`).digest('hex').slice(0, 16);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const TRIM = ['-af', 'silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse', '-f', 's16le', '-ac', '1', '-ar', String(SR)];
+
+/** One sentence of narration as 48 kHz mono PCM, trimmed, cached by voice + text. */
+async function tts(text) {
+  const gemini = CONFIG.voice.startsWith('gemini:');
+  const id = gemini ? `${CONFIG.voice}|${CONFIG.ttsModel}|${CONFIG.style}|${text}` : `${CONFIG.voice}|${CONFIG.rate}|${text}`;
+  const key = createHash('sha1').update(id).digest('hex').slice(0, 16);
   const pcm = path.join(BUILD, 'tts', `${key}.pcm`);
   if (!fs.existsSync(pcm)) {
-    const aiff = path.join(BUILD, 'tts', `${key}.aiff`);
-    execFileSync('say', ['-v', CONFIG.voice, '-r', String(CONFIG.rate), '-o', aiff, '--', text]);
-    execFileSync(FFMPEG, ['-v', 'error', '-y', '-i', aiff, '-af', 'silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse', '-f', 's16le', '-ac', '1', '-ar', String(SR), pcm]);
-    fs.unlinkSync(aiff);
+    const tmp = path.join(BUILD, 'tts', `${key}.${gemini ? 'raw' : 'aiff'}`);
+    let input;
+    if (gemini) {
+      const rate = await geminiTts(text, tmp);
+      input = rate ? ['-f', 's16le', '-ar', String(rate), '-ac', '1', '-i', tmp] : ['-f', 'wav', '-i', tmp];
+    } else {
+      execFileSync('say', ['-v', CONFIG.voice, '-r', String(CONFIG.rate), '-o', tmp, '--', text]);
+      input = ['-i', tmp];
+    }
+    execFileSync(FFMPEG, ['-v', 'error', '-y', ...input, ...TRIM, pcm]);
+    fs.unlinkSync(tmp);
   }
   return fs.readFileSync(pcm);
 }
 
+/** Gemini TTS over plain HTTPS, no SDK. Writes raw 16-bit mono PCM to `file` and returns its sample rate.
+ *  Paid: only reached when CONFIG.voice is 'gemini:<voice>'. The key is read from the config file and never logged. */
+async function geminiTts(text, file) {
+  const voiceName = CONFIG.voice.slice('gemini:'.length);
+  const apiKey = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.config', 'promptlog', 'config.json'), 'utf8')).gemini;
+  if (!apiKey) throw new Error('gemini tts: no `gemini` key in ~/.config/promptlog/config.json');
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: CONFIG.style ? `${CONFIG.style}\n${text}` : text }] }],
+    generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
+  });
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.ttsModel}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body,
+    });
+    if ((res.status === 429 || res.status >= 500) && attempt < 6) {
+      await sleep(1500 * 2 ** attempt);
+      continue;
+    }
+    if (!res.ok) throw new Error(`gemini tts: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+    const part = (await res.json()).candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+    if (!part) throw new Error('gemini tts: no audio in the response');
+    fs.writeFileSync(file, Buffer.from(part.inlineData.data, 'base64'));
+    // Newer models answer with a WAV file (audio/wav), older ones with raw PCM (audio/L16;rate=24000). 0 = WAV.
+    if (/wav/i.test(part.inlineData.mimeType || '')) return 0;
+    return Number(/rate=(\d+)/.exec(part.inlineData.mimeType || '')?.[1] || 24000);
+  }
+}
+
 /** Lays out one scene's audio: lead silence, sentences with gaps, tail. Returns timing + PCM padded to whole frames. */
-function narrate(sc) {
+async function narrate(sc) {
   const lead = sc.lead ?? 0.7, gap = sc.gap ?? 0.45, tail = sc.tail ?? 0.9;
   const parts = [];
   const cues = [], ends = [];
   let t = lead;
   parts.push(Buffer.alloc(Math.round(lead * SR) * 2));
-  sc.sentences.map(norm).forEach((s, i) => {
-    const pcm = tts(s.say);
+  const ss = sc.sentences.map(norm);
+  for (const [i, s] of ss.entries()) {
+    const pcm = await tts(s.say);
     cues.push(t);
     t += pcm.length / 2 / SR;
     ends.push(t);
     parts.push(pcm);
-    const g = i < sc.sentences.length - 1 ? (s.pause ?? gap) : tail;
+    const g = i < ss.length - 1 ? (s.pause ?? gap) : tail;
     parts.push(Buffer.alloc(Math.round(g * SR) * 2));
     t += Math.round(g * SR) / SR;
-  });
+  }
   let pcm = Buffer.concat(parts);
   const frames = Math.max(Math.ceil(pcm.length / 2 / SPF), Math.ceil((sc.minDur ?? 0) * FPS));
   const want = frames * SPF * 2;
@@ -297,11 +347,24 @@ async function main() {
     };
   })();
   const timings = {};
-  for (const id of ORDER) {
-    timings[id] = narrate(SCENES[id]);
-    writeWav(path.join(BUILD, `seg-${id}.wav`), timings[id].pcm);
+  for (const id of ORDER) timings[id] = await narrate(SCENES[id]);
+  // The contest wants at least five minutes: if the cut lands short, the last scene's tail stretches to reach it.
+  const sum = (ids) => ids.reduce((s, id) => s + timings[id].dur, 0);
+  const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+  if (CONFIG.minTotal && sum(ORDER) < CONFIG.minTotal) {
+    const last = ORDER.filter((id) => !SHORT.includes(id)).pop(); // not a scene the short cut shares
+    const extra = CONFIG.minTotal - sum(ORDER);
+    SCENES[last].tail = (SCENES[last].tail ?? 0.9) + extra;
+    timings[last] = await narrate(SCENES[last]);
+    console.log(`stretched ${last}'s tail by ${extra.toFixed(1)}s to reach ${mmss(CONFIG.minTotal)}`);
   }
-  if (!assembleOnly) {
+  for (const id of ORDER) writeWav(path.join(BUILD, `seg-${id}.wav`), timings[id].pcm);
+  if (timingsOnly) {
+    for (const id of ORDER) console.log(`  ${id.padEnd(14)} ${timings[id].dur.toFixed(1)}s${SHORT.includes(id) ? '  (short)' : ''}`);
+    console.log(`full cut ${mmss(sum(ORDER))}, short cut ${mmss(sum(SHORT))}`);
+    return;
+  }
+  if (!assembleOnly && (!shortOnly || only.length)) {
     if (stills) fs.mkdirSync(path.join(BUILD, 'stills'), { recursive: true });
     const todo = only.length ? only : ORDER;
     const browser = await chromium.launch();
@@ -313,24 +376,47 @@ async function main() {
     await browser.close();
     if (stills) return;
   }
-  // assemble: concat video segments (copy), concat audio (exact), mux once
-  const list = ORDER.map((id) => `file '${path.join(BUILD, `seg-${id}.mp4`)}'`).join('\n');
-  fs.writeFileSync(path.join(BUILD, 'concat.txt'), list + '\n');
-  writeWav(path.join(BUILD, 'all.wav'), Buffer.concat(ORDER.map((id) => timings[id].pcm)));
-  const out = path.join(OUT, 'promptlog-demo.mp4');
-  execFileSync(FFMPEG, ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', path.join(BUILD, 'concat.txt'), '-i', path.join(BUILD, 'all.wav'), '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-af', 'volume=-1.5dB', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out]);
+  if (!shortOnly) assemble(ORDER, 'promptlog-demo', timings);
+  assemble(SHORT, 'promptlog-demo-short', timings);
+  for (const id of ORDER) console.log(`  ${id.padEnd(14)} ${timings[id].dur.toFixed(1)}s${SHORT.includes(id) ? '  (short)' : ''}`);
+  console.log(`full cut ${mmss(sum(ORDER))}, short cut ${mmss(sum(SHORT))}`);
+}
+
+/** Concats the segments' video (stream copy) and audio (exact), mixes in the music, muxes once; plus a 720p copy and an .srt. */
+function assemble(ids, name, timings) {
+  const list = path.join(BUILD, `concat-${name}.txt`);
+  fs.writeFileSync(list, ids.map((id) => `file '${path.join(BUILD, `seg-${id}.mp4`)}'`).join('\n') + '\n');
+  const wav = path.join(BUILD, `${name}.wav`);
+  writeWav(wav, Buffer.concat(ids.map((id) => timings[id].pcm)));
+  const total = ids.reduce((s, id) => s + timings[id].dur, 0);
+  const out = path.join(OUT, `${name}.mp4`);
+  const m = CONFIG.music;
+  const inputs = ['-f', 'concat', '-safe', '0', '-i', list, '-i', wav];
+  let audio;
+  if (m) {
+    inputs.push('-stream_loop', '-1', '-i', m.file);
+    const fadeAt = Math.max(0, total - 3).toFixed(2);
+    audio = [
+      '-filter_complex',
+      `[1:a]aformat=sample_rates=${SR}:channel_layouts=stereo[v];` +
+        `[2:a]aformat=sample_rates=${SR}:channel_layouts=stereo,volume=${m.db}dB,afade=t=in:d=1.5,afade=t=out:st=${fadeAt}:d=3[m];` +
+        `[v][m]amix=inputs=2:duration=first:normalize=0,volume=-1.5dB[a]`,
+      '-map', '0:v', '-map', '[a]',
+    ];
+  } else {
+    audio = ['-map', '0:v', '-map', '1:a', '-af', 'volume=-1.5dB'];
+  }
+  execFileSync(FFMPEG, ['-v', 'error', '-y', ...inputs, ...audio, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-shortest', out]);
   // a 720p copy for upload limits
-  execFileSync(FFMPEG, ['-v', 'error', '-y', '-i', out, '-vf', 'scale=1280:720:flags=lanczos', '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', path.join(OUT, 'promptlog-demo-720p.mp4')]);
+  execFileSync(FFMPEG, ['-v', 'error', '-y', '-i', out, '-vf', 'scale=1280:720:flags=lanczos', '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', path.join(OUT, `${name}-720p.mp4`)]);
   // captions file next to the video
   let srt = '', n = 0, off = 0;
-  for (const id of ORDER) {
+  for (const id of ids) {
     for (const c of captions(SCENES[id], timings[id])) srt += `${++n}\n${srtTime(off + c.from)} --> ${srtTime(off + c.to)}\n${c.text}\n\n`;
     off += timings[id].dur;
   }
-  fs.writeFileSync(path.join(OUT, 'promptlog-demo.srt'), srt);
-  const total = ORDER.reduce((s, id) => s + timings[id].dur, 0);
+  fs.writeFileSync(path.join(OUT, `${name}.srt`), srt);
   console.log(`wrote ${out} (${Math.floor(total / 60)}:${String(Math.round(total % 60)).padStart(2, '0')})`);
-  for (const id of ORDER) console.log(`  ${id.padEnd(14)} ${timings[id].dur.toFixed(1)}s`);
 }
 
 main().catch((e) => {

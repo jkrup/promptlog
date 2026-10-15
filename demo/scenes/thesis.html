@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><title>thesis</title><link rel="stylesheet" href="base.css">
+<style>
+.list { position: absolute; left: 96px; top: 70px; width: 1090px; }
+.row { display: flex; align-items: baseline; gap: 22px; margin-bottom: 30px; }
+.row .n { font-family: var(--mono); color: var(--accent2); font-size: 20px; width: 30px; flex: none; }
+.row .t { font-size: 40px; font-weight: 700; letter-spacing: -.8px; line-height: 1.15; }
+.row .t b { color: var(--accent2); }
+.row .s { font-size: 21px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+.end { position: absolute; left: 96px; right: 96px; bottom: 96px; padding: 28px 34px; border-left: 6px solid var(--accent); background: rgba(242,107,42,.08); border-radius: 6px; display: flex; align-items: center; gap: 36px; }
+.end .brand { font-size: 64px; letter-spacing: -2px; flex: none; }
+.end .brand::before { width: 12px; }
+.end .tag { font-size: 30px; font-weight: 650; letter-spacing: -.5px; line-height: 1.25; }
+.end .tag em { font-style: normal; color: var(--accent2); }
+</style></head><body>
+<div class="list">
+  <div class="row" data-s="0" data-out="3" data-dimto=".35"><div class="n">01</div><div><div class="t">The <b>prompt</b> is the unit of work.</div><div class="s">Agents write most of the code now. Code is what the prompt compiles to.</div></div></div>
+  <div class="row" data-s="1" data-out="3" data-dimto=".35"><div class="n">02</div><div><div class="t">Review still reads the output.</div><div class="s">A diff, line by line. The source gets thrown away.</div></div></div>
+  <div class="row" data-s="2" data-out="3" data-dimto=".35"><div class="n">03</div><div><div class="t">promptlog keeps the <b>source</b>.</div><div class="s">In git, next to the code. Messages between agents included.</div></div></div>
+</div>
+<div class="end" data-s="3"><div class="brand">promptlog</div><div class="tag" id="tag"></div></div>
+<script src="scene.js"></script></body></html>
