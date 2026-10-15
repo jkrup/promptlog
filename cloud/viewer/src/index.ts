@@ -94,11 +94,9 @@ export default {
     // ?repo=<name> picks which Artifacts repo this browser looks at, and remembers it; the default is REPO.
     const pick = url.searchParams.get('repo');
     if (pick !== null && !isRepoName(pick)) return new Response('not a repo name\n', { status: 400 });
+    // The link's ?repo= wins over the cookie, and the page is served right away (no redirect that drops ?repo=): Safari
+    // can refuse a cookie set while bouncing in from another site, and an old cookie would then open the wrong repo.
     const repoCookie = (n: string) => `${REPO_COOKIE}=${n}; Path=/; Max-Age=2592000; Secure; SameSite=Lax`;
-    if (keyed && pick !== null) {
-      url.searchParams.delete('repo');
-      return new Response(null, { status: 302, headers: { location: url.pathname + url.search, 'set-cookie': repoCookie(pick) } });
-    }
     const chosen = cookieValue(req, REPO_COOKIE);
     const name = pick ?? (chosen && isRepoName(chosen) ? chosen : env.REPO);
 
@@ -149,7 +147,7 @@ export default {
     let res = await container.fetch(new Request(req, { headers }));
     if (isPublic(env, name) && req.method === 'GET' && url.pathname === '/review') res = withDemoGuide(res, name);
     if (pick === null) return res;
-    // A public visitor came with ?repo=: serve the page itself, and remember the repo so its links stay on it.
+    // Came with ?repo=: serve the page itself, and remember the repo so its links stay on it.
     const out = new Response(res.body, res);
     out.headers.append('set-cookie', repoCookie(pick));
     return out;
